@@ -1,0 +1,365 @@
+package com.tango.recall.data
+
+/**
+ * Starter content.
+ *
+ * Everything here is ordinary editable data — the point is to show what a
+ * well-linked note looks like (shared etymological roots for English, reaction
+ * chains for chemistry) so a new deck has something to imitate. Delete freely.
+ */
+object Seed {
+
+    fun populate(repo: Repository) {
+        if (repo.setting(Repository.KEY_SEEDED, "") == "1") return
+        repo.transaction {
+            seedEnglish(repo)
+            seedChemistry(repo)
+            repo.putSetting(Repository.KEY_SEEDED, "1")
+        }
+    }
+
+    // ---- English ------------------------------------------------------------
+
+    private data class Word(
+        val word: String, val meaning: String, val pos: String, val root: String,
+        val example: String, val exampleJa: String, val collocation: String = "",
+    )
+
+    private val ROOT_GROUPS: List<Pair<String, List<Word>>> = listOf(
+        "spect / spic（見る）" to listOf(
+            Word("perspective", "観点、見通し", "名", "spect / spic（見る）",
+                "Try to see the problem from a different perspective.",
+                "その問題を別の観点から見てみなさい。", "from a ... perspective"),
+            Word("conspicuous", "目立つ、際立った", "形", "spect / spic（見る）",
+                "Her red coat was conspicuous in the crowd.",
+                "彼女の赤いコートは人混みで目立っていた。", "conspicuous absence"),
+            Word("speculate", "推測する、投機する", "動", "spect / spic（見る）",
+                "Analysts speculate that prices will fall.",
+                "アナリストは価格が下がると推測している。", "speculate about / on"),
+            Word("retrospect", "回顧、振り返ること", "名", "spect / spic（見る）",
+                "In retrospect, the decision was clearly wrong.",
+                "振り返ってみれば、その決定は明らかに誤りだった。", "in retrospect"),
+        ),
+        "duc / duct（導く）" to listOf(
+            Word("conduct", "行う、指揮する／行い", "動・名", "duc / duct（導く）",
+                "The team conducted a careful experiment.",
+                "チームは入念な実験を行った。", "conduct a survey / research"),
+            Word("induce", "引き起こす、誘発する", "動", "duc / duct（導く）",
+                "The drug may induce drowsiness.",
+                "その薬は眠気を引き起こすことがある。", "induce sleep / labour"),
+            Word("deduce", "推論する、演繹する", "動", "duc / duct（導く）",
+                "From these facts we can deduce his motive.",
+                "これらの事実から彼の動機を推論できる。", "deduce from"),
+            Word("conducive", "（〜の）助けとなる", "形", "duc / duct（導く）",
+                "A quiet room is conducive to concentration.",
+                "静かな部屋は集中の助けになる。", "be conducive to"),
+        ),
+        "ced / cess（行く・譲る）" to listOf(
+            Word("precede", "先行する、〜に先立つ", "動", "ced / cess（行く・譲る）",
+                "A short introduction precedes each chapter.",
+                "各章の前には短い導入がある。", "precede a meeting"),
+            Word("concede", "認める、譲歩する", "動", "ced / cess（行く・譲る）",
+                "He finally conceded that he was mistaken.",
+                "彼はついに自分が誤っていたと認めた。", "concede defeat"),
+            Word("unprecedented", "前例のない", "形", "ced / cess（行く・譲る）",
+                "The country faced an unprecedented crisis.",
+                "その国は前例のない危機に直面した。", "unprecedented scale / level"),
+            Word("recession", "景気後退、後退", "名", "ced / cess（行く・譲る）",
+                "The economy slipped into a deep recession.",
+                "経済は深刻な景気後退に陥った。", "fall into recession"),
+        ),
+        "ten / tain（保つ）" to listOf(
+            Word("sustain", "持続させる、支える", "動", "ten / tain（保つ）",
+                "It is hard to sustain such rapid growth.",
+                "これほど急速な成長を持続させるのは難しい。", "sustain growth / damage"),
+            Word("retain", "保持する、覚えている", "動", "ten / tain（保つ）",
+                "The soil retains water well.",
+                "その土壌はよく水を保つ。", "retain information / heat"),
+            Word("tenacious", "粘り強い、執拗な", "形", "ten / tain（保つ）",
+                "She is tenacious in pursuing her goals.",
+                "彼女は目標の追求に粘り強い。", "a tenacious grip"),
+            Word("detain", "拘留する、引き止める", "動", "ten / tain（保つ）",
+                "Police detained two suspects overnight.",
+                "警察は容疑者2人を一晩拘留した。", "be detained by police"),
+        ),
+        "vert / vers（回る）" to listOf(
+            Word("divert", "そらす、転換する", "動", "vert / vers（回る）",
+                "Traffic was diverted to a side road.",
+                "車の流れは脇道へそらされた。", "divert attention / funds"),
+            Word("adverse", "不利な、逆の", "形", "vert / vers（回る）",
+                "The plan had adverse effects on the environment.",
+                "その計画は環境に悪影響を及ぼした。", "adverse effect / weather"),
+            Word("versatile", "多才な、用途の広い", "形", "vert / vers（回る）",
+                "Wood is a remarkably versatile material.",
+                "木材は非常に用途の広い材料だ。", "a versatile player / tool"),
+            Word("converse", "逆の、反対の／会話する", "形・動", "vert / vers（回る）",
+                "The converse is not necessarily true.",
+                "その逆が必ずしも成り立つとは限らない。", "the converse of"),
+        ),
+        "pos / pon（置く）" to listOf(
+            Word("impose", "課す、押しつける", "動", "pos / pon（置く）",
+                "The government imposed a new tax on imports.",
+                "政府は輸入品に新たな税を課した。", "impose a tax / restriction"),
+            Word("dispose", "処分する、配置する", "動", "pos / pon（置く）",
+                "Please dispose of the waste properly.",
+                "廃棄物は適切に処分してください。", "dispose of"),
+            Word("component", "構成要素、部品", "名", "pos / pon（置く）",
+                "Memory is a key component of learning.",
+                "記憶は学習の重要な構成要素だ。", "a key component of"),
+            Word("postpone", "延期する", "動", "pos / pon（置く）",
+                "They postponed the launch until next spring.",
+                "彼らは発売を来春まで延期した。", "postpone a decision"),
+        ),
+    )
+
+    private fun seedEnglish(repo: Repository) {
+        val deckId = repo.saveDeck(
+            Deck(
+                name = "英単語（語源でつなぐ）",
+                noteTypeId = NoteType.ENGLISH.id,
+                enabledTemplates = setOf("en_ja", "ja_en", "cloze"),
+                newPerDay = 15,
+            )
+        )
+
+        for ((root, words) in ROOT_GROUPS) {
+            val ids = words.map { w ->
+                repo.saveNote(
+                    Note(
+                        deckId = deckId,
+                        typeId = NoteType.ENGLISH.id,
+                        fields = mapOf(
+                            "word" to w.word,
+                            "meaning" to w.meaning,
+                            "pos" to w.pos,
+                            "root" to w.root,
+                            "example" to w.example,
+                            "exampleJa" to w.exampleJa,
+                            "collocation" to w.collocation,
+                            "memo" to "",
+                        ),
+                        tags = listOf("語源", root.substringBefore("（").trim().replace(" / ", "-")),
+                    )
+                )
+            }
+            // Every word in a root group is linked to every other one, so answering any
+            // of them surfaces the rest.
+            for (i in ids.indices) for (j in i + 1 until ids.size) {
+                repo.addLink(ids[i], ids[j], LinkType.SAME_ROOT, root)
+            }
+        }
+
+        // A couple of cross-group relations that are worth noticing.
+        val byWord = repo.listNotes(deckId, "", Int.MAX_VALUE).associateBy { it.title() }
+        fun link(a: String, b: String, t: LinkType, memo: String = "") {
+            val x = byWord[a]?.id ?: return
+            val y = byWord[b]?.id ?: return
+            repo.addLink(x, y, t, memo)
+        }
+        link("induce", "deduce", LinkType.CONTRAST, "induce=帰納的に引き出す / deduce=演繹して導く")
+        link("adverse", "conducive", LinkType.ANTONYM, "不利に働く ↔ 助けとなる")
+        link("concede", "precede", LinkType.CONFUSABLE, "つづりが近い。concede=認める / precede=先行する")
+        link("retain", "sustain", LinkType.SYNONYM, "どちらも「保ち続ける」")
+    }
+
+    // ---- Chemistry ----------------------------------------------------------
+
+    private fun seedChemistry(repo: Repository) {
+        val substanceDeck = repo.saveDeck(
+            Deck(
+                name = "化学・無機物質",
+                noteTypeId = NoteType.CHEM_SUBSTANCE.id,
+                enabledTemplates = setOf("name_formula", "formula_name", "name_props"),
+                newPerDay = 10,
+            )
+        )
+        val reactionDeck = repo.saveDeck(
+            Deck(
+                name = "化学・工業的製法と反応",
+                noteTypeId = NoteType.CHEM_REACTION.id,
+                enabledTemplates = setOf("title_eq", "eq_title", "title_cond"),
+                newPerDay = 6,
+            )
+        )
+
+        fun substance(
+            name: String, formula: String, category: String, props: String, uses: String,
+        ): Long = repo.saveNote(
+            Note(
+                deckId = substanceDeck,
+                typeId = NoteType.CHEM_SUBSTANCE.id,
+                fields = mapOf(
+                    "name" to name, "formula" to formula, "category" to category,
+                    "props" to props, "uses" to uses, "memo" to "",
+                ),
+                tags = listOf("無機", category),
+            )
+        )
+
+        fun reaction(
+            title: String, equation: String, condition: String, point: String,
+        ): Long = repo.saveNote(
+            Note(
+                deckId = reactionDeck,
+                typeId = NoteType.CHEM_REACTION.id,
+                fields = mapOf(
+                    "title" to title, "equation" to equation,
+                    "condition" to condition, "point" to point, "memo" to "",
+                ),
+                tags = listOf("無機", "製法"),
+            )
+        )
+
+        val h2so4 = substance(
+            "硫酸", "H2SO4", "オキソ酸",
+            "濃硫酸は不揮発性・吸湿性・脱水作用をもち、密度が大きい。希硫酸は強酸。",
+            "乾燥剤、希硫酸は金属と反応して水素を発生。熱濃硫酸は酸化剤としてはたらく。",
+        )
+        val so2 = substance(
+            "二酸化硫黄", "SO2", "酸性酸化物",
+            "無色・刺激臭。水に溶けて亜硫酸となり弱酸性。還元性を示し漂白作用がある。",
+            "接触法の原料。硫化水素と反応すると硫黄が析出する（SO2 が酸化剤側）。",
+        )
+        val so3 = substance(
+            "三酸化硫黄", "SO3", "酸性酸化物",
+            "水と激しく反応して硫酸になるため、濃硫酸に吸収させて発煙硫酸とする。",
+            "接触法の中間生成物。",
+        )
+        val h2s = substance(
+            "硫化水素", "H2S", "酸性・還元剤",
+            "無色・腐卵臭・有毒。水溶液は弱酸性。強い還元性をもつ。",
+            "多くの金属イオンと硫化物の沈殿をつくり、系統分析に使われる。",
+        )
+        val nh3 = substance(
+            "アンモニア", "NH3", "塩基",
+            "無色・刺激臭。水に極めてよく溶け弱塩基性を示す。三角錐形の極性分子。",
+            "ハーバー・ボッシュ法で合成し、オストワルト法で硝酸の原料になる。",
+        )
+        val hno3 = substance(
+            "硝酸", "HNO3", "オキソ酸",
+            "強酸かつ強い酸化剤。光や熱で分解するため褐色びんに保存する。",
+            "希硝酸は NO、濃硝酸は NO2 を発生。Al・Fe・Ni は濃硝酸で不動態となる。",
+        )
+        val no = substance(
+            "一酸化窒素", "NO", "中性酸化物",
+            "無色・水に溶けにくい。空気中で直ちに酸化されて二酸化窒素になる。",
+            "水上置換で捕集する。",
+        )
+        val no2 = substance(
+            "二酸化窒素", "NO2", "酸性酸化物",
+            "赤褐色・刺激臭・有毒。水に溶けて硝酸と一酸化窒素を生じる。",
+            "下方置換で捕集する。",
+        )
+        val naoh = substance(
+            "水酸化ナトリウム", "NaOH", "塩基",
+            "白色固体。潮解性があり空気中の水分を吸う。強塩基。",
+            "空気中の CO2 を吸収して炭酸ナトリウムになるため密閉保存する。",
+        )
+        val na2co3 = substance(
+            "炭酸ナトリウム", "Na2CO3", "塩",
+            "白色粉末。水溶液は加水分解により塩基性。十水和物は風解する。",
+            "アンモニアソーダ法で製造。ガラスの原料。",
+        )
+        val caco3 = substance(
+            "炭酸カルシウム", "CaCO3", "塩",
+            "水に溶けにくい白色固体（石灰石・大理石）。強熱すると CaO と CO2 に分解。",
+            "塩酸を加えると CO2 が発生する。アンモニアソーダ法の原料。",
+        )
+        val cuso4 = substance(
+            "硫酸銅(II)五水和物", "CuSO4.5H2O", "塩",
+            "青色結晶。加熱すると白色の無水物になる（可逆）。",
+            "白色無水物は水に触れると青変するので、水の検出に使える。",
+        )
+        val al2o3 = substance(
+            "酸化アルミニウム", "Al2O3", "両性酸化物",
+            "融点が非常に高い白色固体。酸にも強塩基にも溶ける両性酸化物。",
+            "融解塩電解（氷晶石を加える）でアルミニウムの単体を得る。",
+        )
+        val cl2 = substance(
+            "塩素", "Cl2", "ハロゲン単体",
+            "黄緑色・刺激臭・有毒。水に溶けて塩化水素と次亜塩素酸を生じ、酸化作用を示す。",
+            "下方置換で捕集し、水（塩化水素の除去）と濃硫酸（乾燥）に通す。",
+        )
+
+        val contact = reaction(
+            "接触法（硫酸の工業的製法）",
+            "S or FeS2 → SO2\n2SO2 + O2 ⇄ 2SO3\nSO3 + H2O → H2SO4",
+            "第2段階は酸化バナジウム(V) V2O5 を触媒とし約400〜500℃",
+            "SO3 は水と激しく反応するので、直接水に通さず濃硫酸に吸収させて発煙硫酸とし、希硫酸で薄める。",
+        )
+        val ostwald = reaction(
+            "オストワルト法（硝酸の工業的製法）",
+            "4NH3 + 5O2 → 4NO + 6H2O\n2NO + O2 → 2NO2\n3NO2 + H2O → 2HNO3 + NO",
+            "第1段階は白金 Pt 触媒、約800℃",
+            "第3段階で生じた NO は回収して第2段階に戻す。全体では NH3 + 2O2 → HNO3 + H2O。",
+        )
+        val haber = reaction(
+            "ハーバー・ボッシュ法（アンモニアの合成）",
+            "N2 + 3H2 ⇄ 2NH3",
+            "四酸化三鉄 Fe3O4 を主成分とする触媒、約400〜600℃・約1〜3×10^7 Pa",
+            "発熱・分子数減少の平衡反応。低温・高圧ほど収率は上がるが、低温では速度が落ちるため触媒と高温の妥協点をとる。",
+        )
+        val solvay = reaction(
+            "アンモニアソーダ法（ソルベー法）",
+            "NaCl + NH3 + CO2 + H2O → NaHCO3 + NH4Cl\n2NaHCO3 → Na2CO3 + H2O + CO2",
+            "第2段階は加熱（熱分解）",
+            "CO2 は CaCO3 → CaO + CO2 から供給し、NH3 は CaO と NH4Cl から回収して循環させる。",
+        )
+        val thermite = reaction(
+            "テルミット反応",
+            "2Al + Fe2O3 → Al2O3 + 2Fe",
+            "点火（マグネシウムリボンなど）",
+            "Al の酸素との親和力が大きいことを利用した還元。多量の熱が出て鉄が融解する。",
+        )
+        val cuHot = reaction(
+            "銅と熱濃硫酸",
+            "Cu + 2H2SO4 → CuSO4 + SO2 + 2H2O",
+            "加熱した濃硫酸",
+            "Cu はイオン化傾向が水素より小さく、希硫酸には溶けない。熱濃硫酸の酸化作用で溶ける。",
+        )
+        val cuDilNitric = reaction(
+            "銅と希硝酸",
+            "3Cu + 8HNO3 → 3Cu(NO3)2 + 2NO + 4H2O",
+            "希硝酸、常温",
+            "発生する気体は無色の NO。濃硝酸では赤褐色の NO2 になる点と対で覚える。",
+        )
+        val cuConcNitric = reaction(
+            "銅と濃硝酸",
+            "Cu + 4HNO3 → Cu(NO3)2 + 2NO2 + 2H2O",
+            "濃硝酸、常温",
+            "赤褐色の NO2 が発生。希硝酸との違いは「濃いほど窒素の酸化数が高いまま残る」と整理する。",
+        )
+
+        fun link(a: Long, b: Long, t: LinkType, memo: String) = repo.addLink(a, b, t, memo)
+
+        link(contact, so2, LinkType.PRODUCES, "接触法 第1段階の生成物")
+        link(contact, so3, LinkType.PRODUCES, "接触法 第2段階の生成物")
+        link(contact, h2so4, LinkType.PRODUCES, "最終生成物")
+        link(so2, so3, LinkType.CONTRAST, "酸化されて SO3 へ。硫黄の酸化数 +4 → +6")
+        link(so2, h2s, LinkType.REACTS_WITH, "SO2 + 2H2S → 3S + 2H2O：SO2 が酸化剤としてはたらく")
+
+        link(ostwald, nh3, LinkType.PRODUCES, "原料")
+        link(ostwald, no, LinkType.PRODUCES, "第1段階の生成物")
+        link(ostwald, no2, LinkType.PRODUCES, "第2段階の生成物")
+        link(ostwald, hno3, LinkType.PRODUCES, "最終生成物")
+        link(no, no2, LinkType.CONTRAST, "無色・水に溶けにくい ↔ 赤褐色・水に溶ける")
+        link(haber, nh3, LinkType.PRODUCES, "生成物")
+        link(haber, ostwald, LinkType.RELATED, "ハーバー・ボッシュ法の NH3 がオストワルト法の原料になる")
+
+        link(solvay, na2co3, LinkType.PRODUCES, "最終生成物")
+        link(solvay, caco3, LinkType.RELATED, "CO2 の供給源かつ NH3 回収に使う CaO の原料")
+        link(na2co3, naoh, LinkType.CONFUSABLE, "どちらもナトリウムの塩基性物質。潮解（NaOH）と風解（Na2CO3·10H2O）を対で覚える")
+
+        link(cuHot, h2so4, LinkType.RELATED, "熱濃硫酸の酸化作用")
+        link(cuHot, so2, LinkType.PRODUCES, "発生する気体")
+        link(cuHot, cuso4, LinkType.PRODUCES, "生成する塩")
+        link(cuDilNitric, no, LinkType.PRODUCES, "無色の NO が発生")
+        link(cuConcNitric, no2, LinkType.PRODUCES, "赤褐色の NO2 が発生")
+        link(cuDilNitric, cuConcNitric, LinkType.CONTRAST, "濃度で生成する窒素酸化物が変わる — 対で覚える")
+        link(cuDilNitric, hno3, LinkType.RELATED, "希硝酸の酸化作用")
+        link(cuConcNitric, hno3, LinkType.RELATED, "濃硝酸の酸化作用")
+
+        link(thermite, al2o3, LinkType.PRODUCES, "生成する酸化物")
+        link(al2o3, cl2, LinkType.RELATED, "いずれも工業的に電解・酸化還元と結びつく")
+    }
+}
