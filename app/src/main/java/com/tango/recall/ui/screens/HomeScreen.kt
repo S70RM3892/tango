@@ -22,6 +22,7 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -93,6 +94,11 @@ fun HomeScreen(vm: AppViewModel, nav: NavController) {
                         enabled = totalStudyable > 0,
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("すべてまとめて学習") }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { nav.navigate(Routes.graph(null)) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("つながり地図を見る") }
                 }
             }
 

@@ -14,6 +14,8 @@ object Seed {
         repo.transaction {
             seedEnglish(repo)
             seedChemistry(repo)
+            seedEisakubun(repo)
+            seedChemCalc(repo)
             repo.putSetting(Repository.KEY_SEEDED, "1")
         }
     }
@@ -119,6 +121,7 @@ object Seed {
                 noteTypeId = NoteType.ENGLISH.id,
                 enabledTemplates = setOf("en_ja", "ja_en", "cloze"),
                 newPerDay = 15,
+                relationQuiz = true,
             )
         )
 
@@ -171,6 +174,7 @@ object Seed {
                 noteTypeId = NoteType.CHEM_SUBSTANCE.id,
                 enabledTemplates = setOf("name_formula", "formula_name", "name_props"),
                 newPerDay = 10,
+                relationQuiz = true,
             )
         )
         val reactionDeck = repo.saveDeck(
@@ -179,6 +183,7 @@ object Seed {
                 noteTypeId = NoteType.CHEM_REACTION.id,
                 enabledTemplates = setOf("title_eq", "eq_title", "title_cond"),
                 newPerDay = 6,
+                relationQuiz = true,
             )
         )
 
@@ -361,5 +366,153 @@ object Seed {
 
         link(thermite, al2o3, LinkType.PRODUCES, "生成する酸化物")
         link(al2o3, cl2, LinkType.RELATED, "いずれも工業的に電解・酸化還元と結びつく")
+    }
+
+    // ---- 和文英訳 -------------------------------------------------------------
+
+    private fun seedEisakubun(repo: Repository) {
+        val deckId = repo.saveDeck(
+            Deck(
+                name = "和文英訳（直訳できない日本語）",
+                noteTypeId = NoteType.EISAKUBUN.id,
+                enabledTemplates = setOf("ja_en_write"),
+                newPerDay = 3,
+            )
+        )
+
+        fun sentence(ja: String, en: String, structures: String, traps: String) = repo.saveNote(
+            Note(
+                deckId = deckId,
+                typeId = NoteType.EISAKUBUN.id,
+                fields = mapOf(
+                    "ja" to ja, "en" to en, "structures" to structures, "traps" to traps, "memo" to "",
+                ),
+                tags = listOf("和文英訳"),
+            )
+        )
+
+        sentence(
+            "彼の言うことは、どうも腑に落ちない。",
+            "Somehow what he says doesn't quite make sense to me.",
+            "「腑に落ちない」を doesn't make sense / doesn't convince me と言い換える\n" +
+                "「どうも」を somehow で受け、「どうも〜ない」に not quite を添える\n" +
+                "「彼の言うこと」を what he says（関係代名詞 what）で出す",
+            "「腑に落ちない」を慣用句のまま訳そうとしない。意味は「納得できない」。",
+        )
+        sentence(
+            "本を読むのは、他人の頭で考えることだ。",
+            "To read a book is to think with someone else's head.",
+            "「〜のは…ことだ」を to 不定詞または動名詞でそろえる\n" +
+                "「他人の頭で」を with someone else's head と前置詞で出す",
+            "主語と補語の形をそろえる（To read 〜 is to think 〜）。片方だけ動名詞にしない。",
+        )
+        sentence(
+            "知らないということを知っているだけ、彼はましだ。",
+            "He is better off in that he at least knows that he knows nothing.",
+            "「〜だけましだ」を be better off で出す\n" +
+                "「〜という点で」を in that 節で補う\n" +
+                "「知らないということを知っている」を knows that he knows nothing と入れ子にする",
+            "「ましだ」に good の比較級を当てない。better off / at least で処理する。",
+        )
+        sentence(
+            "若いうちの苦労は買ってでもせよ、とはよく言ったものだ。",
+            "How true it is that you should seek out hardship while you are young.",
+            "「とはよく言ったものだ」を How true it is that … で出す\n" +
+                "「買ってでもせよ」を seek out と言い換える\n" +
+                "「若いうち」を while you are young で出す",
+            "「買う」を buy と訳さない。「進んで求めよ」の意味。",
+        )
+        sentence(
+            "彼女は口を開けば人の悪口ばかりだ。",
+            "She never opens her mouth without speaking ill of someone.",
+            "「〜すれば必ず…」を never … without -ing で出す\n" +
+                "「悪口を言う」を speak ill of で出す",
+            "「ばかりだ」を only で処理しない。二重否定の構文に落とすと自然になる。",
+        )
+
+        val byJa = repo.listNotes(deckId, "", Int.MAX_VALUE).associateBy { it.title() }
+        fun link(a: String, b: String, t: LinkType, memo: String) {
+            val x = byJa[a]?.id ?: return
+            val y = byJa[b]?.id ?: return
+            repo.addLink(x, y, t, memo)
+        }
+        link(
+            "知らないということを知っているだけ、彼はましだ。",
+            "若いうちの苦労は買ってでもせよ、とはよく言ったものだ。",
+            LinkType.SAME_GROUP, "どちらも「日本語の慣用表現を意味に開いてから英語にする」型",
+        )
+        link(
+            "彼女は口を開けば人の悪口ばかりだ。",
+            "彼の言うことは、どうも腑に落ちない。",
+            LinkType.CONTRAST, "否定構文で処理する / 婉曲表現で処理する の対比",
+        )
+    }
+
+    // ---- 化学の計算 -----------------------------------------------------------
+
+    private fun seedChemCalc(repo: Repository) {
+        val deckId = repo.saveDeck(
+            Deck(
+                name = "化学・計算",
+                noteTypeId = NoteType.CHEM_CALC.id,
+                enabledTemplates = setOf("calc"),
+                newPerDay = 4,
+            )
+        )
+
+        fun problem(
+            question: String, answer: String, unit: String, tolerance: String, solution: String,
+        ) = repo.saveNote(
+            Note(
+                deckId = deckId,
+                typeId = NoteType.CHEM_CALC.id,
+                fields = mapOf(
+                    "question" to question, "answer" to answer, "unit" to unit,
+                    "tolerance" to tolerance, "solution" to solution, "memo" to "",
+                ),
+                tags = listOf("計算"),
+            )
+        )
+
+        val mol = problem(
+            "標準状態（0℃、1.013×10^5 Pa）で 5.6 L の酸素は何 mol か。",
+            "0.25", "mol", "1",
+            "気体 1 mol の体積は標準状態で 22.4 L。5.6 ÷ 22.4 = 0.25 mol",
+        )
+        val molarity = problem(
+            "塩化ナトリウム（式量 58.5）11.7 g を水に溶かして 500 mL にした。モル濃度は何 mol/L か。",
+            "0.400", "mol/L", "1",
+            "物質量 = 11.7 ÷ 58.5 = 0.200 mol。0.200 ÷ 0.500 L = 0.400 mol/L",
+        )
+        val ideal = problem(
+            "27℃、1.0×10^5 Pa で 2.0 mol の理想気体が占める体積は何 L か。R = 8.3×10^3 Pa·L/(mol·K)",
+            "50", "L", "2",
+            "V = nRT/P = 2.0 × 8.3×10^3 × 300 ÷ 1.0×10^5 ≒ 50 L。絶対温度に直すのを忘れない。",
+        )
+        val strongAcid = problem(
+            "0.010 mol/L の塩酸の pH はいくらか。",
+            "2.0", "", "1",
+            "塩酸は強酸で完全に電離するので [H+] = 1.0×10^-2 mol/L。pH = 2.0",
+        )
+        val weakAcid = problem(
+            "0.10 mol/L の酢酸水溶液の pH はいくらか。電離定数 Ka = 2.7×10^-5 mol/L",
+            "2.8", "", "2",
+            "弱酸なので [H+] = √(Ka·c) = √(2.7×10^-5 × 0.10) ≒ 1.6×10^-3。pH ≒ 2.8",
+        )
+        val combustion = problem(
+            "メタン CH4 1.0 mol を完全燃焼させるのに必要な酸素は何 mol か。",
+            "2.0", "mol", "1",
+            "CH4 + 2O2 → CO2 + 2H2O。係数比より酸素は 2 倍の 2.0 mol",
+        )
+        val percent = problem(
+            "質量パーセント濃度 20% の水酸化ナトリウム水溶液 200 g に含まれる NaOH は何 g か。",
+            "40", "g", "1",
+            "200 g × 0.20 = 40 g",
+        )
+
+        repo.addLink(strongAcid, weakAcid, LinkType.CONTRAST, "強酸は [H+] = c、弱酸は [H+] = √(Ka·c)。ここを取り違えやすい")
+        repo.addLink(mol, ideal, LinkType.RELATED, "標準状態の 22.4 L は気体の状態方程式から出る特別な場合")
+        repo.addLink(molarity, percent, LinkType.CONTRAST, "モル濃度は体積あたり、質量パーセントは質量あたり")
+        repo.addLink(combustion, mol, LinkType.RELATED, "係数比から物質量を出す流れは共通")
     }
 }

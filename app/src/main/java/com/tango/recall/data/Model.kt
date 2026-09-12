@@ -20,6 +20,16 @@ enum class AnswerMode {
 
     /** The answer is blanked out inside a sentence and must be typed back in. */
     CLOZE,
+
+    /**
+     * Write a free answer, then grade it yourself against a model answer and a
+     * checklist of the points that had to appear. Used for translation into English,
+     * where no automatic comparison is honest.
+     */
+    SELF_CHECK,
+
+    /** Enter a number; graded against the expected value within a tolerance. */
+    NUMERIC,
 }
 
 /**
@@ -41,6 +51,11 @@ data class CardTemplate(
     val clozeSentenceField: String? = null,
     /** For [AnswerMode.CLOZE]: the field whose value is removed from the sentence. */
     val clozeAnswerField: String? = null,
+    /** For [AnswerMode.SELF_CHECK]: field whose lines become the self-grading checklist. */
+    val checklistField: String? = null,
+    /** For [AnswerMode.NUMERIC]: fields holding the unit and the allowed error in percent. */
+    val unitField: String? = null,
+    val toleranceField: String? = null,
     /** Off by default — enabled per deck by the user. */
     val defaultEnabled: Boolean = true,
 )
@@ -76,6 +91,9 @@ enum class NoteType(
                 requires = listOf("root", "word"), defaultEnabled = false),
             CardTemplate("collo", "コロケーション → 語", listOf("collocation"), listOf("word"), AnswerMode.TYPE,
                 requires = listOf("collocation", "word"), defaultEnabled = false),
+            CardTemplate("ja_en_sentence", "例文の和訳 → 英訳を書く", listOf("exampleJa"), listOf("example"),
+                AnswerMode.SELF_CHECK,
+                requires = listOf("example", "exampleJa"), defaultEnabled = false),
         ),
     ),
 
@@ -117,6 +135,65 @@ enum class NoteType(
                 requires = listOf("title", "equation")),
             CardTemplate("title_cond", "反応名 → 条件・触媒", listOf("title"), listOf("condition", "point"), AnswerMode.REVEAL,
                 requires = listOf("title", "condition")),
+        ),
+    ),
+
+    /**
+     * Translation into English.
+     *
+     * Kyoto University's paper has carried a 和文英訳 question every single year, and
+     * the hard part is never vocabulary — it is rephrasing Japanese that cannot be
+     * translated literally. So the note keeps that rephrasing explicit, and grading is
+     * a checklist of the points that had to appear rather than a string comparison.
+     */
+    EISAKUBUN(
+        id = "eisakubun",
+        label = "和文英訳",
+        fields = listOf(
+            FieldDef("ja", "日本語文", "彼の言うことは、どうも腑に落ちない。", multiline = true),
+            FieldDef("en", "模範英訳", "Something about what he says doesn't quite convince me.", multiline = true),
+            FieldDef(
+                "structures", "押さえる点（1行に1つ）",
+                "「腑に落ちない」→ doesn't convince me と言い換える\nsomething about 〜 を使う",
+                multiline = true,
+            ),
+            FieldDef("traps", "直訳できない箇所", "「腑に落ちない」をそのまま訳そうとしない", multiline = true),
+            FieldDef("memo", "メモ", "", multiline = true),
+        ),
+        templates = listOf(
+            CardTemplate(
+                "ja_en_write", "和文英訳を書く", listOf("ja"), listOf("en", "traps"), AnswerMode.SELF_CHECK,
+                requires = listOf("ja", "en"), checklistField = "structures",
+            ),
+            CardTemplate(
+                "trap_only", "言い換えのポイントだけ確認", listOf("ja"), listOf("traps", "structures"),
+                AnswerMode.REVEAL, requires = listOf("ja", "traps"), defaultEnabled = false,
+            ),
+        ),
+    ),
+
+    /** A chemistry problem with a numeric answer, graded within a tolerance. */
+    CHEM_CALC(
+        id = "chem_calc",
+        label = "化学・計算",
+        fields = listOf(
+            FieldDef("question", "問題", "0.10 mol/L の酢酸水溶液の pH。Ka = 2.7×10^-5", multiline = true),
+            FieldDef("answer", "答え（数値）", "2.8"),
+            FieldDef("unit", "単位", "mol/L, g, pH など（無次元なら空欄）"),
+            FieldDef("tolerance", "許容誤差（%）", "既定は 1"),
+            FieldDef("solution", "解き方", "弱酸の電離: [H+] = √(Ka·c)", multiline = true),
+            FieldDef("memo", "メモ", "", multiline = true),
+        ),
+        templates = listOf(
+            CardTemplate(
+                "calc", "計算して答える", listOf("question"), listOf("answer", "solution"), AnswerMode.NUMERIC,
+                requires = listOf("question", "answer"),
+                unitField = "unit", toleranceField = "tolerance",
+            ),
+            CardTemplate(
+                "method", "解き方を思い出す", listOf("question"), listOf("solution"), AnswerMode.REVEAL,
+                requires = listOf("question", "solution"), defaultEnabled = false,
+            ),
         ),
     ),
 
@@ -177,6 +254,8 @@ enum class LinkType(
             NoteType.ENGLISH -> listOf(SAME_ROOT, SYNONYM, ANTONYM, DERIVED, CONFUSABLE, CONTRAST, RELATED)
             NoteType.CHEM_SUBSTANCE -> listOf(REACTS_WITH, PRODUCES, SAME_GROUP, CONTRAST, CONFUSABLE, HYPERNYM, RELATED)
             NoteType.CHEM_REACTION -> listOf(PRODUCES, SAME_GROUP, CONTRAST, RELATED)
+            NoteType.EISAKUBUN -> listOf(SAME_GROUP, CONTRAST, CONFUSABLE, RELATED)
+            NoteType.CHEM_CALC -> listOf(SAME_GROUP, CONTRAST, RELATED)
             NoteType.BASIC -> entries
         }
     }
@@ -188,6 +267,8 @@ data class Deck(
     val noteTypeId: String,
     val enabledTemplates: Set<String>,
     val newPerDay: Int = 20,
+    /** Whether this deck also drills the relations its notes take part in. */
+    val relationQuiz: Boolean = false,
     val created: Long = System.currentTimeMillis(),
 ) {
     val noteType: NoteType get() = NoteType.fromId(noteTypeId)
@@ -211,6 +292,8 @@ data class Note(
         NoteType.ENGLISH -> this["word"]
         NoteType.CHEM_SUBSTANCE -> this["name"]
         NoteType.CHEM_REACTION -> this["title"]
+        NoteType.EISAKUBUN -> this["ja"]
+        NoteType.CHEM_CALC -> this["question"]
         NoteType.BASIC -> this["front"]
     }.ifBlank { type.fields.firstNotNullOfOrNull { fields[it.id]?.ifBlank { null } } ?: "(空)" }
 
@@ -218,6 +301,8 @@ data class Note(
         NoteType.ENGLISH -> this["meaning"]
         NoteType.CHEM_SUBSTANCE -> this["formula"]
         NoteType.CHEM_REACTION -> this["equation"]
+        NoteType.EISAKUBUN -> this["en"]
+        NoteType.CHEM_CALC -> listOf(this["answer"], this["unit"]).filter { it.isNotBlank() }.joinToString(" ")
         NoteType.BASIC -> this["back"]
     }
 }
@@ -259,3 +344,34 @@ data class ReviewEntry(
     val difficulty: Double,
     val tookMs: Long,
 )
+
+/**
+ * Cards generated from the relation graph rather than from a note's own fields.
+ *
+ * One card per (note, relation type) rather than one per link: asking "which words
+ * share this root?" and listing all of them is both a fairer question and far fewer
+ * cards than asking about each pair separately.
+ */
+object RelationCards {
+    const val PREFIX = "rel:"
+    private const val REVERSE_SUFFIX = ":r"
+
+    /**
+     * Asymmetric relations read differently from each end — "生成する" vs "から作られる" —
+     * so they get a card per direction. Symmetric ones read the same either way and
+     * get a single card.
+     */
+    fun templateId(type: LinkType, reverse: Boolean): String =
+        PREFIX + type.id + if (reverse && !type.symmetric) REVERSE_SUFFIX else ""
+
+    fun isRelationCard(templateId: String): Boolean = templateId.startsWith(PREFIX)
+
+    fun parse(templateId: String): Pair<LinkType, Boolean>? {
+        if (!isRelationCard(templateId)) return null
+        val body = templateId.removePrefix(PREFIX)
+        val reverse = body.endsWith(REVERSE_SUFFIX)
+        return LinkType.fromId(body.removeSuffix(REVERSE_SUFFIX)) to reverse
+    }
+
+    fun label(type: LinkType, reverse: Boolean): String = if (reverse) type.reverse else type.forward
+}

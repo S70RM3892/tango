@@ -9,7 +9,6 @@ import com.tango.recall.data.NoteType
 import com.tango.recall.data.Repository
 import com.tango.recall.data.Seed
 import com.tango.recall.data.TangoDb
-import com.tango.recall.data.renderCard
 import com.tango.recall.srs.CardPhase
 import com.tango.recall.srs.Rating
 import org.junit.Assert.assertEquals
@@ -109,7 +108,7 @@ class RepositoryTest {
         var rendered = 0
         for (note in notes) {
             for (card in repo.cardsOfNote(note.id)) {
-                val view = renderCard(card, note)
+                val view = repo.renderAnyCard(card, note)
                 assertNotNull("card ${card.templateId} of ${note.title()} failed to render", view)
                 assertTrue(view!!.promptText.isNotBlank())
                 assertTrue(view.answerParts.isNotEmpty())
@@ -117,6 +116,10 @@ class RepositoryTest {
             }
         }
         assertTrue("seed should produce a substantial number of cards", rendered > 80)
+        assertTrue(
+            "the seed should ship relation questions too",
+            notes.any { note -> repo.cardsOfNote(note.id).any { it.templateId.startsWith("rel:") } },
+        )
     }
 
     @Test

@@ -7,6 +7,29 @@ import com.tango.recall.srs.FsrsScheduler
 import com.tango.recall.srs.Rating
 import java.util.Calendar
 
+data class RelationGroup(
+    val type: LinkType,
+    val reverse: Boolean,
+    val partners: List<RelatedNote>,
+)
+
+/** One note as drawn on the connection map. */
+data class GraphNode(
+    val noteId: Long,
+    val deckId: Long,
+    val typeId: String,
+    val title: String,
+    val subtitle: String,
+    val degree: Int,
+    /** Mean predicted recall across this note's cards, 0..1. Drives how brightly it glows. */
+    val strength: Double,
+    val isNew: Boolean,
+)
+
+data class GraphEdge(val from: Long, val to: Long, val typeId: String, val label: String)
+
+data class GraphData(val nodes: List<GraphNode>, val edges: List<GraphEdge>)
+
 data class DeckCounts(val newCount: Int, val learnCount: Int, val dueCount: Int, val total: Int) {
     val studyable: Int get() = newCount + learnCount + dueCount
 }
@@ -85,6 +108,7 @@ class Repository(private val helper: TangoDb) {
             put("noteType", deck.noteTypeId)
             put("enabledTemplates", deck.enabledTemplates.toJsonArray())
             put("newPerDay", deck.newPerDay)
+            put("relationQuiz", if (deck.relationQuiz) 1 else 0)
             put("created", deck.created)
         }
         return if (deck.id == 0L) {
@@ -185,11 +209,12 @@ class Repository(private val helper: TangoDb) {
      * and drop cards whose direction no longer applies.
      */
     private fun regenerateCards(note: Note, deck: Deck) {
-        val wanted = note.type.templates
+        val fromFields = note.type.templates
             .filter { it.id in deck.enabledTemplates }
             .filter { tpl -> tpl.requires.all { note[it].isNotBlank() } }
             .map { it.id }
-            .toSet()
+        val fromRelations = if (deck.relationQuiz) relationGroups(note.id).keys else emptySet()
+        val wanted = (fromFields + fromRelations).toSet()
 
         val existing = db.rawQuery(
             "SELECT * FROM cards WHERE noteId=?", arrayOf(note.id.toString()),
@@ -208,6 +233,42 @@ class Repository(private val helper: TangoDb) {
         }
         // A note can be moved between decks; keep its cards pointing at the right one.
         db.execSQL("UPDATE cards SET deckId=? WHERE noteId=?", arrayOf(note.deckId, note.id))
+    }
+
+    /**
+     * The relation questions this note can currently be asked, keyed by card template id.
+     *
+     * Partners are grouped so one card covers every note reachable by the same
+     * relation in the same direction.
+     */
+    fun relationGroups(noteId: Long): Map<String, RelationGroup> {
+        val grouped = LinkedHashMap<String, MutableList<RelatedNote>>()
+        val labels = HashMap<String, Pair<LinkType, Boolean>>()
+        for (rel in related(noteId)) {
+            val type = rel.link.type
+            val reverse = !type.symmetric && rel.link.toNoteId == noteId
+            val id = RelationCards.templateId(type, reverse)
+            grouped.getOrPut(id) { mutableListOf() } += rel
+            labels[id] = type to reverse
+        }
+        return grouped.mapValues { (id, partners) ->
+            val (type, reverse) = labels.getValue(id)
+            RelationGroup(type, reverse, partners)
+        }
+    }
+
+    /** Render any card, including the ones generated from the relation graph. */
+    fun renderAnyCard(card: Card, note: Note): RenderedCard? {
+        if (!RelationCards.isRelationCard(card.templateId)) return renderCard(card, note)
+        val group = relationGroups(note.id)[card.templateId] ?: return null
+        return renderRelationCard(card, note, group.type, group.reverse, group.partners)
+    }
+
+    /** Rebuild the relation cards of one note after its links changed. */
+    private fun refreshRelationCards(noteId: Long) {
+        val note = note(noteId) ?: return
+        val deck = deck(note.deckId) ?: return
+        if (deck.relationQuiz) regenerateCards(note, deck)
     }
 
     fun cardsOfNote(noteId: Long): List<Card> =
@@ -366,11 +427,21 @@ class Repository(private val helper: TangoDb) {
             },
             SQLiteDatabase.CONFLICT_IGNORE,
         )
-        return id != -1L
+        if (id == -1L) return false
+        // Both endpoints gain a relation question, or gain a partner in an existing one.
+        refreshRelationCards(fromNoteId)
+        refreshRelationCards(toNoteId)
+        return true
     }
 
     fun deleteLink(id: Long) {
+        val link = db.rawQuery("SELECT * FROM links WHERE id=?", arrayOf(id.toString()))
+            .mapAll { it.toLink() }.firstOrNull()
         db.delete("links", "id=?", arrayOf(id.toString()))
+        link?.let {
+            refreshRelationCards(it.fromNoteId)
+            refreshRelationCards(it.toNoteId)
+        }
     }
 
     /**
@@ -480,6 +551,48 @@ class Repository(private val helper: TangoDb) {
             .take(limit)
         val ns = notes(scored.map { it.first.noteId })
         return scored.mapNotNull { (c, r) -> ns[c.noteId]?.let { it to r } }
+    }
+
+    /**
+     * The whole relation graph, ready to lay out.
+     *
+     * Node strength is the mean predicted recall of the note's cards, so the map
+     * doubles as a picture of what is currently solid and what is fading.
+     */
+    fun graph(deckId: Long?, now: Long = System.currentTimeMillis(), limit: Int = 500): GraphData {
+        val notes = listNotes(deckId, "", limit)
+        if (notes.isEmpty()) return GraphData(emptyList(), emptyList())
+        val ids = notes.map { it.id }.toSet()
+        val sched = scheduler()
+
+        val allLinks = db.rawQuery("SELECT * FROM links", null).mapAll { it.toLink() }
+            .filter { it.fromNoteId in ids && it.toNoteId in ids }
+
+        val degree = HashMap<Long, Int>()
+        for (link in allLinks) {
+            degree[link.fromNoteId] = (degree[link.fromNoteId] ?: 0) + 1
+            degree[link.toNoteId] = (degree[link.toNoteId] ?: 0) + 1
+        }
+
+        val nodes = notes.map { note ->
+            val cards = cardsOfNote(note.id)
+            val seen = cards.filter { it.srs.phase != CardPhase.NEW }
+            GraphNode(
+                noteId = note.id,
+                deckId = note.deckId,
+                typeId = note.typeId,
+                title = note.title(),
+                subtitle = note.subtitle(),
+                degree = degree[note.id] ?: 0,
+                strength = if (seen.isEmpty()) 0.0 else seen.map { sched.retrievability(it.srs, now) }.average(),
+                isNew = seen.isEmpty(),
+            )
+        }
+
+        val edges = allLinks.map {
+            GraphEdge(it.fromNoteId, it.toNoteId, it.typeId, it.type.forward)
+        }
+        return GraphData(nodes, edges)
     }
 
     fun transaction(body: () -> Unit) {

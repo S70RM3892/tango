@@ -20,6 +20,7 @@ import androidx.navigation.navArgument
 import com.tango.recall.ui.AppViewModel
 import com.tango.recall.ui.screens.BrowseScreen
 import com.tango.recall.ui.screens.DeckScreen
+import com.tango.recall.ui.screens.GraphScreen
 import com.tango.recall.ui.screens.HomeScreen
 import com.tango.recall.ui.screens.NoteScreen
 import com.tango.recall.ui.screens.ReviewScreen
@@ -50,6 +51,7 @@ object Routes {
     const val DECK = "deck/{deckId}"
     const val BROWSE = "browse/{deckId}"
     const val NOTE = "note/{noteId}/{deckId}"
+    const val GRAPH = "graph/{deckId}"
     const val STATS = "stats"
     const val SETTINGS = "settings"
 
@@ -57,6 +59,7 @@ object Routes {
     fun deck(deckId: Long) = "deck/$deckId"
     fun browse(deckId: Long?) = "browse/${deckId ?: -1L}"
     fun note(noteId: Long, deckId: Long) = "note/$noteId/$deckId"
+    fun graph(deckId: Long?) = "graph/${deckId ?: -1L}"
 }
 
 @Composable
@@ -103,6 +106,13 @@ fun TangoApp() {
                     noteId = entry.arguments?.getLong("noteId") ?: 0L,
                     deckId = entry.arguments?.getLong("deckId") ?: 0L,
                 )
+            }
+            composable(
+                Routes.GRAPH,
+                arguments = listOf(navArgument("deckId") { type = NavType.LongType }),
+            ) { entry ->
+                val raw = entry.arguments?.getLong("deckId") ?: -1L
+                GraphScreen(vm, nav, raw.takeIf { it >= 0 })
             }
             composable(Routes.STATS) { StatsScreen(vm, nav) }
             composable(Routes.SETTINGS) { SettingsScreen(vm, nav) }

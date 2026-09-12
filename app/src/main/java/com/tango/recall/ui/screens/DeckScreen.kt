@@ -28,6 +28,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -52,6 +53,7 @@ fun DeckScreen(vm: AppViewModel, nav: NavController, deckId: Long) {
     var noteType by remember { mutableStateOf(NoteType.ENGLISH) }
     var enabled by remember { mutableStateOf<Set<String>>(emptySet()) }
     var newPerDay by remember { mutableStateOf(15f) }
+    var relationQuiz by remember { mutableStateOf(false) }
     var created by remember { mutableStateOf(System.currentTimeMillis()) }
     var typeMenu by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -65,6 +67,7 @@ fun DeckScreen(vm: AppViewModel, nav: NavController, deckId: Long) {
                 noteType = d.noteType
                 enabled = d.enabledTemplates
                 newPerDay = d.newPerDay.toFloat()
+                relationQuiz = d.relationQuiz
                 created = d.created
             }
         } else {
@@ -171,6 +174,21 @@ fun DeckScreen(vm: AppViewModel, nav: NavController, deckId: Long) {
             }
 
             SectionCard {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        SectionTitle("関係そのものも出題する")
+                        Text(
+                            "「この語と同語根の語は？」「この反応で生成するものは？」を、" +
+                                "登録した関係から自動で作って出題します。新しく入力する必要はありません。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Switch(checked = relationQuiz, onCheckedChange = { relationQuiz = it })
+                }
+            }
+
+            SectionCard {
                 SectionTitle("1日の新規カード上限：${newPerDay.toInt()} 枚")
                 Slider(
                     value = newPerDay,
@@ -227,6 +245,7 @@ fun DeckScreen(vm: AppViewModel, nav: NavController, deckId: Long) {
                             noteTypeId = noteType.id,
                             enabledTemplates = enabled,
                             newPerDay = newPerDay.toInt(),
+                            relationQuiz = relationQuiz,
                             created = created,
                         )
                     ) { nav.popBackStack() }

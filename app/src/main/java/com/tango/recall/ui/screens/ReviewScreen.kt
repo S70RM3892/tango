@@ -1,5 +1,6 @@
 package com.tango.recall.ui.screens
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -49,6 +51,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -141,7 +144,7 @@ private fun CardPane(session: ReviewSession, vm: AppViewModel, onPeek: (Note) ->
 
             if (card.mode != AnswerMode.REVEAL && !session.revealed) {
                 Spacer(Modifier.height(20.dp))
-                TypeAnswerField(session, vm)
+                TypeAnswerField(card, session, vm)
             }
 
             if (session.revealed) {
@@ -150,7 +153,12 @@ private fun CardPane(session: ReviewSession, vm: AppViewModel, onPeek: (Note) ->
                 Spacer(Modifier.height(12.dp))
                 AnswerBlock(card, typed = session.typed)
 
-                if (session.related.isNotEmpty()) {
+                if (card.mode == AnswerMode.SELF_CHECK && card.checklist.isNotEmpty()) {
+                    Spacer(Modifier.height(12.dp))
+                    ChecklistBlock(card, session, vm)
+                }
+
+                if (session.related.isNotEmpty() && !card.isRelation) {
                     Spacer(Modifier.height(20.dp))
                     RelatedBlock(session.related, onPeek)
                 }
@@ -192,21 +200,71 @@ private fun QuestionBlock(card: RenderedCard) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun TypeAnswerField(session: ReviewSession, vm: AppViewModel) {
+private fun TypeAnswerField(card: RenderedCard, session: ReviewSession, vm: AppViewModel) {
     val focus = remember { FocusRequester() }
     val keyboard = LocalSoftwareKeyboardController.current
-    LaunchedEffect(session.current?.card?.id) {
-        runCatching { focus.requestFocus() }
+    LaunchedEffect(card.card.id) { runCatching { focus.requestFocus() } }
+
+    val label = when (card.mode) {
+        AnswerMode.SELF_CHECK -> "英語で書いてみる（提出してから自分で採点します）"
+        AnswerMode.NUMERIC -> if (card.unit.isBlank()) "答えの数値" else "答えの数値（単位は ${card.unit}）"
+        else -> "答えを入力（書けると記憶は強くなります）"
     }
+    // A plain decimal pad is nicer, but an answer written in scientific notation
+    // needs the full keyboard to type the exponent.
+    val needsExponent = card.expectedAnswer.contains(Regex("[eE^×x]"))
+    val keyboardType = if (card.mode == AnswerMode.NUMERIC && !needsExponent) {
+        KeyboardType.Decimal
+    } else KeyboardType.Text
+    val multiline = card.mode == AnswerMode.SELF_CHECK
+
     OutlinedTextField(
         value = session.typed,
         onValueChange = vm::updateTyped,
         modifier = Modifier.fillMaxWidth().focusRequester(focus),
-        label = { Text("答えを入力（書けると記憶は強くなります）") },
+        label = { Text(label) },
+        placeholder = {
+            if (card.mode == AnswerMode.NUMERIC && needsExponent) Text("例: 2.7e-5 / 2.7×10^-5")
+        },
+        suffix = { if (card.mode == AnswerMode.NUMERIC && card.unit.isNotBlank()) Text(card.unit) },
         singleLine = false,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+        minLines = if (multiline) 3 else 1,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = keyboardType,
+            imeAction = if (multiline) ImeAction.Default else ImeAction.Done,
+        ),
         keyboardActions = KeyboardActions(onDone = { keyboard?.hide(); vm.reveal() }),
     )
+}
+
+/**
+ * The self-grading checklist.
+ *
+ * Translation into English cannot be marked by string comparison, so the learner
+ * checks off the points the model answer required. Ticking a box updates the
+ * suggested button immediately.
+ */
+@Composable
+private fun ChecklistBlock(card: RenderedCard, session: ReviewSession, vm: AppViewModel) {
+    SectionCard {
+        SectionTitle("押さえるべき点")
+        Spacer(Modifier.height(4.dp))
+        Text(
+            "書いた英文と模範解答を見比べて、できていた項目にチェックしてください。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(8.dp))
+        card.checklist.forEachIndexed { index, item ->
+            Row(
+                Modifier.fillMaxWidth().clickable { vm.toggleCheck(index) },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Checkbox(checked = index in session.checked, onCheckedChange = { vm.toggleCheck(index) })
+                Text(item, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            }
+        }
+    }
 }
 
 @Composable
@@ -314,7 +372,13 @@ private fun AnswerBar(session: ReviewSession, vm: AppViewModel) {
                 onClick = { vm.reveal() },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
             ) {
-                Text(if (card.mode == AnswerMode.REVEAL) "答えを見る" else "答え合わせ")
+                Text(
+                    when (card.mode) {
+                        AnswerMode.REVEAL -> "答えを見る"
+                        AnswerMode.SELF_CHECK -> "模範解答と見比べる"
+                        else -> "答え合わせ"
+                    }
+                )
             }
         } else {
             val suggested = session.grade?.suggestedRating

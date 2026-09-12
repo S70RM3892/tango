@@ -31,6 +31,7 @@ class TangoDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VE
               noteType TEXT NOT NULL,
               enabledTemplates TEXT NOT NULL,
               newPerDay INTEGER NOT NULL DEFAULT 20,
+              relationQuiz INTEGER NOT NULL DEFAULT 0,
               created INTEGER NOT NULL
             )
             """.trimIndent()
@@ -108,12 +109,15 @@ class TangoDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VE
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // No released schema to migrate from yet; future versions add ALTER statements here.
+        // Migrations are additive and must never drop a learner's review history.
+        if (oldVersion < 2) {
+            db.execSQL("ALTER TABLE decks ADD COLUMN relationQuiz INTEGER NOT NULL DEFAULT 0")
+        }
     }
 
     companion object {
         const val DB_NAME = "tango.db"
-        const val DB_VERSION = 1
+        const val DB_VERSION = 2
     }
 }
 
@@ -170,6 +174,7 @@ internal fun Cursor.toDeck() = Deck(
     noteTypeId = str("noteType"),
     enabledTemplates = str("enabledTemplates").toStringSet(),
     newPerDay = int("newPerDay"),
+    relationQuiz = int("relationQuiz") != 0,
     created = long("created"),
 )
 

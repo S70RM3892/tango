@@ -2,8 +2,11 @@ package com.tango.recall.data
 
 import com.tango.recall.srs.Rating
 import java.text.Normalizer
+import kotlin.math.abs
+import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.roundToInt
 
 const val CLOZE_BLANK = "______"
 
@@ -18,10 +21,21 @@ data class RenderedCard(
     val promptExtras: List<Pair<String, String>>,
     val answerParts: List<Pair<String, String>>,
     val mode: AnswerMode,
+    /** For [AnswerMode.SELF_CHECK]: the points the answer had to contain. */
+    val checklist: List<String> = emptyList(),
+    /** For [AnswerMode.NUMERIC]: shown beside the input so the unit need not be typed. */
+    val unit: String = "",
+    val tolerancePercent: Double = DEFAULT_TOLERANCE_PERCENT,
+    /** True when the question came from the relation graph rather than the note's fields. */
+    val isRelation: Boolean = false,
 ) {
     /** The single string a typed answer is compared against. */
     val expectedAnswer: String get() = answerParts.firstOrNull()?.second.orEmpty()
 }
+
+const val DEFAULT_TOLERANCE_PERCENT = 1.0
+
+private val DEFAULT_CHECKLIST = listOf("意味が正しく伝わっているか", "文法・語法に誤りがないか")
 
 fun renderCard(card: Card, note: Note): RenderedCard? {
     val template = note.type.template(card.templateId) ?: return null
@@ -57,6 +71,16 @@ fun renderCard(card: Card, note: Note): RenderedCard? {
     val extras = template.promptFields.drop(1)
         .mapNotNull { id -> note[id].takeIf { it.isNotBlank() }?.let { type.label(id) to it } }
 
+    val checklist = if (template.mode == AnswerMode.SELF_CHECK) {
+        template.checklistField
+            ?.let { note[it] }
+            ?.lines()
+            ?.map { it.trim().removePrefix("・").removePrefix("-").trim() }
+            ?.filter { it.isNotEmpty() }
+            .orEmpty()
+            .ifEmpty { DEFAULT_CHECKLIST }
+    } else emptyList()
+
     return RenderedCard(
         card = card,
         note = note,
@@ -66,6 +90,57 @@ fun renderCard(card: Card, note: Note): RenderedCard? {
         promptExtras = extras,
         answerParts = answerParts,
         mode = template.mode,
+        checklist = checklist,
+        unit = template.unitField?.let { note[it] }.orEmpty().trim(),
+        tolerancePercent = template.toleranceField
+            ?.let { note[it] }
+            ?.trim()
+            ?.toDoubleOrNull()
+            ?.takeIf { it > 0 }
+            ?: DEFAULT_TOLERANCE_PERCENT,
+    )
+}
+
+/**
+ * Build a question out of the relation graph: "which notes hang off this one by
+ * [linkType]?" The answer is every partner at once, which is both a fairer question
+ * than picking one of them and far fewer cards than one per link.
+ */
+fun renderRelationCard(
+    card: Card,
+    note: Note,
+    linkType: LinkType,
+    reverse: Boolean,
+    partners: List<RelatedNote>,
+): RenderedCard? {
+    if (partners.isEmpty()) return null
+    val relationLabel = RelationCards.label(linkType, reverse)
+    val template = CardTemplate(
+        id = RelationCards.templateId(linkType, reverse),
+        label = "つながり: $relationLabel",
+        promptFields = emptyList(),
+        answerFields = emptyList(),
+        mode = AnswerMode.REVEAL,
+        requires = emptyList(),
+    )
+    return RenderedCard(
+        card = card,
+        note = note,
+        template = template,
+        promptLabel = "「$relationLabel」でつながるものは？（${partners.size} 件）",
+        promptText = note.title(),
+        promptExtras = listOfNotNull(
+            note.subtitle().takeIf { it.isNotBlank() }?.let { note.type.label(note.type.fields[1].id) to it },
+        ),
+        answerParts = partners.map { p ->
+            val caption = p.link.memo.ifBlank { p.label }
+            val body = listOf(p.other.title(), p.other.subtitle())
+                .filter { it.isNotBlank() }
+                .joinToString(" — ")
+            caption to body
+        },
+        mode = AnswerMode.REVEAL,
+        isRelation = true,
     )
 }
 
@@ -198,4 +273,91 @@ fun humanDelay(ms: Long): String {
         minutes < 60 * 24 * 365 -> "${"%.1f".format(minutes / (60 * 24 * 30))}か月"
         else -> "${"%.1f".format(minutes / (60 * 24 * 365))}年"
     }
+}
+
+// ---- numeric answers --------------------------------------------------------
+
+/**
+ * Read a number the way a chemistry answer is actually written: `2.8`, `1.2e-3`,
+ * `1.2×10^-3`, `1.2*10^-3`, full-width digits, thousands separators.
+ */
+fun parseNumber(text: String): Double? {
+    var t = Normalizer.normalize(text, Normalizer.Form.NFKC).trim()
+        .replace(",", "")
+        .replace("\\s+".toRegex(), "")
+        .replace("−", "-")
+        .replace("ー", "-")
+    if (t.isEmpty()) return null
+    // "1.2×10^-3" / "1.2*10-3" style scientific notation.
+    t = t.replace("[×xX*・]10\\^?([+-]?\\d+)".toRegex(), "e$1")
+    // A bare power of ten with no mantissa.
+    t = t.replace("^10\\^([+-]?\\d+)$".toRegex(), "1e$1")
+    t = t.replace("\\^".toRegex(), "e")
+    return t.toDoubleOrNull()
+}
+
+/** Significant digits in a written number, used only to comment on the answer. */
+internal fun significantDigits(text: String): Int {
+    val mantissa = Normalizer.normalize(text, Normalizer.Form.NFKC).trim()
+        .substringBefore("e").substringBefore("E").substringBefore("×").substringBefore("x")
+        .replace("-", "").replace("+", "")
+    val digits = mantissa.filter { it.isDigit() || it == '.' }
+    if (digits.isEmpty()) return 0
+    val stripped = digits.replace(".", "").trimStart('0')
+    return if (stripped.isEmpty()) 1 else stripped.length
+}
+
+/**
+ * Grade a numeric answer within [tolerancePercent].
+ *
+ * An answer that is right except for a power of ten is reported as wrong — in
+ * chemistry it is — but the message says so explicitly, because the method was sound
+ * and that is the useful thing to know.
+ */
+fun gradeNumeric(input: String, expectedText: String, tolerancePercent: Double, unit: String = ""): GradeResult {
+    val expected = parseNumber(expectedText)
+        ?: return gradeTyped(input, expectedText, chemistry = true)
+    val shown = listOf(expectedText.trim(), unit).filter { it.isNotBlank() }.joinToString(" ")
+
+    val got = parseNumber(input)
+        ?: return GradeResult(Grade.WRONG, shown, if (input.isBlank()) "未入力" else "数値として読み取れません")
+
+    val tolerance = (tolerancePercent / 100.0).coerceAtLeast(0.0)
+    val error = if (expected == 0.0) abs(got) else abs(got - expected) / abs(expected)
+
+    if (error <= tolerance) {
+        val wanted = significantDigits(expectedText)
+        val given = significantDigits(input)
+        val note = if (wanted in 1..9 && given != wanted) "正解（有効数字は $wanted 桁で答えるのが自然です）" else "正解"
+        return GradeResult(Grade.CORRECT, shown, note)
+    }
+
+    if (expected != 0.0 && got != 0.0 && (got > 0) == (expected > 0)) {
+        val exponent = log10(abs(got / expected))
+        val rounded = exponent.roundToInt()
+        if (rounded != 0 && abs(exponent - rounded) < 0.02) {
+            val sign = if (rounded > 0) "+" else ""
+            return GradeResult(Grade.WRONG, shown, "数値は合っていますが桁が違います（10^$sign$rounded 倍）")
+        }
+    }
+
+    return if (error <= tolerance * 10) {
+        GradeResult(Grade.CLOSE, shown, "惜しい（誤差 ${"%.1f".format(error * 100)}%）")
+    } else {
+        GradeResult(Grade.WRONG, shown, "不正解（誤差 ${"%.0f".format(error * 100)}%）")
+    }
+}
+
+// ---- self-graded answers ----------------------------------------------------
+
+/** Turn "3 of the 4 points were covered" into a grade and a suggested button. */
+fun gradeSelfCheck(checked: Int, total: Int): GradeResult {
+    if (total <= 0) return GradeResult(Grade.CLOSE, "", "自分で評価してください")
+    val ratio = checked.toDouble() / total
+    val grade = when {
+        ratio >= 1.0 -> Grade.CORRECT
+        ratio >= 0.5 -> Grade.CLOSE
+        else -> Grade.WRONG
+    }
+    return GradeResult(grade, "", "$total 点中 $checked 点を押さえられました")
 }

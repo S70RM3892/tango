@@ -10,7 +10,9 @@ import androidx.compose.runtime.setValue
 import com.tango.recall.data.Card
 import com.tango.recall.data.Deck
 import com.tango.recall.data.DeckCounts
+import com.tango.recall.data.AnswerMode
 import com.tango.recall.data.GradeResult
+import com.tango.recall.data.GraphData
 import com.tango.recall.data.ImportExport
 import com.tango.recall.data.ImportResult
 import com.tango.recall.data.LinkType
@@ -22,8 +24,9 @@ import com.tango.recall.data.Repository
 import com.tango.recall.data.Seed
 import com.tango.recall.data.Stats
 import com.tango.recall.data.TangoDb
+import com.tango.recall.data.gradeNumeric
+import com.tango.recall.data.gradeSelfCheck
 import com.tango.recall.data.gradeTyped
-import com.tango.recall.data.renderCard
 import com.tango.recall.srs.Rating
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -40,6 +43,8 @@ data class ReviewSession(
     val revealed: Boolean = false,
     val typed: String = "",
     val grade: GradeResult? = null,
+    /** For self-graded cards: which checklist points the learner ticked. */
+    val checked: Set<Int> = emptySet(),
     val previews: Map<Rating, Long> = emptyMap(),
     val answered: Int = 0,
     val correct: Int = 0,
@@ -161,7 +166,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             val cardId = s.queue[p]
             val card = io { repo.card(cardId) }
             val note = card?.let { io { repo.note(it.noteId) } }
-            val rendered = if (card != null && note != null) renderCard(card, note) else null
+            val rendered = if (card != null && note != null) io { repo.renderAnyCard(card, note) } else null
             if (rendered != null) {
                 val rel = if (repo.showRelated) io { repo.related(note!!.id) } else emptyList()
                 val previews = io { repo.scheduler().previewDelays(card!!.srs, System.currentTimeMillis()) }
@@ -172,6 +177,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     revealed = false,
                     typed = "",
                     grade = null,
+                    checked = emptySet(),
                     previews = previews,
                     shownAt = System.currentTimeMillis(),
                 )
@@ -186,15 +192,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         session = session?.copy(typed = value)
     }
 
-    /** Reveal the answer; for typed cards this also grades what was entered. */
+    /** Reveal the answer; for typed and numeric cards this also grades what was entered. */
     fun reveal() {
         val s = session ?: return
         val card = s.current ?: return
-        val grade = if (card.mode == com.tango.recall.data.AnswerMode.REVEAL) null else {
-            val chemistry = card.note.type == NoteType.CHEM_SUBSTANCE || card.note.type == NoteType.CHEM_REACTION
-            gradeTyped(s.typed, card.expectedAnswer, chemistry)
+        val grade = when (card.mode) {
+            AnswerMode.REVEAL -> null
+            AnswerMode.NUMERIC -> gradeNumeric(s.typed, card.expectedAnswer, card.tolerancePercent, card.unit)
+            // Nothing is ticked yet, so this starts at the bottom and rises as the
+            // learner works down the checklist.
+            AnswerMode.SELF_CHECK -> gradeSelfCheck(0, card.checklist.size)
+            AnswerMode.TYPE, AnswerMode.CLOZE -> {
+                val chemistry = card.note.type == NoteType.CHEM_SUBSTANCE ||
+                    card.note.type == NoteType.CHEM_REACTION
+                gradeTyped(s.typed, card.expectedAnswer, chemistry)
+            }
         }
         session = s.copy(revealed = true, grade = grade)
+    }
+
+    /** Tick or untick one point on a self-graded card. */
+    fun toggleCheck(index: Int) {
+        val s = session ?: return
+        val card = s.current ?: return
+        val checked = if (index in s.checked) s.checked - index else s.checked + index
+        session = s.copy(checked = checked, grade = gradeSelfCheck(checked.size, card.checklist.size))
     }
 
     fun rate(rating: Rating) = viewModelScope.launch {
@@ -310,6 +332,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun weakest(): List<Pair<Note, Double>> = io { repo.weakest() }
+
+    suspend fun graph(deckId: Long?): GraphData = io { repo.graph(deckId) }
 
     companion object {
         private const val REQUEUE_HORIZON_MS = 20 * 60_000L
