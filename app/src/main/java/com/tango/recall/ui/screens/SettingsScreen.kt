@@ -35,6 +35,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.AlertDialog
 import androidx.navigation.NavController
@@ -54,6 +55,7 @@ fun SettingsScreen(vm: AppViewModel, nav: NavController) {
     var pickingTime by remember { mutableStateOf(false) }
     var reminder by remember { mutableStateOf(vm.reminderEnabled) }
     val snackbar = remember { SnackbarHostState() }
+    val context = LocalContext.current
 
     // Android 13 and later will not show a notification until it has been allowed.
     val askNotifications = rememberLauncherForActivityResult(
@@ -225,6 +227,31 @@ fun SettingsScreen(vm: AppViewModel, nav: NavController) {
             }
 
             SectionCard {
+                SectionTitle("過去問を入れる")
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "京都大学は、一般選抜の試験問題と「出題意図」を公式サイトで公開しています" +
+                        "（英語は III・IV のみ。許諾の得られない英文は掲載されません）。" +
+                        "同梱の数学は出題の型に沿った自作問題なので、実物はここから写して" +
+                        "「数学」のノートに足してください。出題意図は、このアプリが問う「方針」" +
+                        "そのものなので、ノートの『押さえる手順』にそのまま使えます。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(
+                    onClick = { openUrl(context, KYOTO_PAST_PAPERS) },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("京都大学の試験問題・出題意図を開く") }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "ノートの「出典」欄に URL を書いておくと、今日の1問からそのまま開けます。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            SectionCard {
                 SectionTitle("覚え方について")
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -310,3 +337,14 @@ private fun toLocalExamMoment(utcMidnight: Long): Long {
 
 private fun formatExamDate(millis: Long): String =
     SimpleDateFormat("yyyy年M月d日", Locale.JAPAN).format(millis)
+
+/**
+ * Where the real papers are.
+ *
+ * The university publishes the questions and, more usefully, its own statement of what
+ * each question was asking for — which is the same thing this app makes you write down
+ * as the 方針. Linking is the honest way to give access to them: the questions are
+ * copyrighted works, and the page says in as many words that publishing them is not
+ * permission to reproduce them.
+ */
+private const val KYOTO_PAST_PAPERS = "https://www.kyoto-u.ac.jp/ja/admissions/undergrad/past-eq"

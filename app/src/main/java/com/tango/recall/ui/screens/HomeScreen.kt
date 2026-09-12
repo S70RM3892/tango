@@ -30,8 +30,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.material3.TextButton
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -288,13 +290,18 @@ private fun ProblemOfTheDayCard(note: Note, onSolve: () -> Unit, onOpen: () -> U
             maxLines = 6,
             overflow = TextOverflow.Ellipsis,
         )
-        note["source"].takeIf { it.isNotBlank() }?.let {
+        note["source"].takeIf { it.isNotBlank() }?.let { source ->
             Spacer(Modifier.height(6.dp))
             Text(
-                "出典: $it",
+                "出典: $source",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // A note that records where the problem came from can go back to it.
+            firstUrl(source)?.let { url ->
+                val context = LocalContext.current
+                TextButton(onClick = { openUrl(context, url) }) { Text("出典を開く") }
+            }
         }
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
