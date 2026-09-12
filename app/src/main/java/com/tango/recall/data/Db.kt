@@ -98,6 +98,7 @@ class TangoDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VE
             )
             """.trimIndent()
         )
+        db.execSQL(CREATE_CONFUSIONS)
         db.execSQL("CREATE TABLE settings(k TEXT PRIMARY KEY, v TEXT NOT NULL)")
 
         db.execSQL("CREATE INDEX idx_cards_due ON cards(deckId, suspended, due)")
@@ -106,6 +107,7 @@ class TangoDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VE
         db.execSQL("CREATE INDEX idx_links_from ON links(fromNoteId)")
         db.execSQL("CREATE INDEX idx_links_to ON links(toNoteId)")
         db.execSQL("CREATE INDEX idx_reviews_ts ON reviews(ts)")
+        db.execSQL(INDEX_CONFUSIONS)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -113,11 +115,30 @@ class TangoDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VE
         if (oldVersion < 2) {
             db.execSQL("ALTER TABLE decks ADD COLUMN relationQuiz INTEGER NOT NULL DEFAULT 0")
         }
+        if (oldVersion < 3) {
+            db.execSQL(CREATE_CONFUSIONS)
+            db.execSQL(INDEX_CONFUSIONS)
+        }
     }
 
     companion object {
         const val DB_NAME = "tango.db"
-        const val DB_VERSION = 2
+        const val DB_VERSION = 3
+
+        /** Every time one note's answer was written where another note's was wanted. */
+        private const val CREATE_CONFUSIONS = """
+            CREATE TABLE confusions(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              noteId INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+              otherNoteId INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+              templateId TEXT NOT NULL,
+              typed TEXT NOT NULL,
+              ts INTEGER NOT NULL
+            )
+        """
+
+        private const val INDEX_CONFUSIONS =
+            "CREATE INDEX idx_confusions_pair ON confusions(noteId, otherNoteId)"
     }
 }
 

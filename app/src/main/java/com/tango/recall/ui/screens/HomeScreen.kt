@@ -38,6 +38,7 @@ import androidx.navigation.NavController
 import com.tango.recall.Routes
 import com.tango.recall.data.Deck
 import com.tango.recall.data.DeckCounts
+import com.tango.recall.data.ExamOutlook
 import com.tango.recall.ui.AppViewModel
 
 @Composable
@@ -47,6 +48,7 @@ fun HomeScreen(vm: AppViewModel, nav: NavController) {
         vm.toast?.let { snackbar.showSnackbar(it); vm.toast = null }
     }
 
+    LaunchedEffect(Unit) { vm.loadExamOutlook() }
     val totalStudyable = vm.counts.values.sumOf { it.studyable }
 
     Scaffold(
@@ -102,6 +104,10 @@ fun HomeScreen(vm: AppViewModel, nav: NavController) {
                 }
             }
 
+            vm.examOutlook?.let { outlook ->
+                item { ExamCard(outlook, onStudy = { nav.navigate(Routes.EXAM_REVIEW) }) }
+            }
+
             item { SectionTitle("デッキ") }
 
             if (vm.decks.isEmpty()) {
@@ -126,6 +132,64 @@ fun HomeScreen(vm: AppViewModel, nav: NavController) {
                 )
             }
         }
+    }
+}
+
+/**
+ * The exam countdown.
+ *
+ * Ordinary spaced repetition answers "what is due today". With a date to aim at, the
+ * more useful question is what will have decayed *by then* — so this reports the
+ * predicted state of the collection on the day, not today's backlog.
+ */
+@Composable
+private fun ExamCard(outlook: ExamOutlook, onStudy: () -> Unit) {
+    SectionCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (outlook.daysLeft >= 0) "試験まで あと ${outlook.daysLeft} 日" else "試験日は過ぎました",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    "その日の予測定着率 ${(outlook.predictedMean * 100).toInt()}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                "${outlook.atRisk}",
+                style = MaterialTheme.typography.headlineSmall,
+                color = if (outlook.atRisk > 0) MaterialTheme.colorScheme.error
+                else MaterialTheme.colorScheme.primary,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            buildString {
+                append("このまま進めると、試験日に目標を下回るカードが ${outlook.atRisk} 枚。")
+                if (outlook.untouchedCards > 0) {
+                    append("まだ手をつけていないカードが ${outlook.untouchedCards} 枚あります。")
+                }
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        if (outlook.daysLeft in 0..60) {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "試験が近いので、目標定着率を自動で ${(outlook.effectiveRetention * 100).toInt()}% に" +
+                    "引き上げて間隔を詰めています。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Button(
+            onClick = onStudy,
+            enabled = outlook.atRisk > 0,
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("試験日に弱い順で復習する") }
     }
 }
 

@@ -30,6 +30,25 @@ object Fsrs {
         1.8729, 0.5425, 0.0912, 0.0658, 0.1542,
     )
 
+    /**
+     * Predicted probability of recall [elapsedDays] after the last review.
+     *
+     * Free of scheduler settings on purpose: desired retention decides *when* to
+     * review, but the forgetting curve itself depends only on stability and decay.
+     * That makes it safe to ask "what will this look like on exam day?".
+     */
+    fun recallAfter(
+        elapsedDays: Double,
+        stability: Double,
+        decayParameter: Double = DEFAULT_PARAMETERS[20],
+    ): Double {
+        if (stability <= 0.0) return 0.0
+        if (elapsedDays <= 0.0) return 1.0
+        val decay = -decayParameter
+        val factor = 0.9.pow(1.0 / decay) - 1.0
+        return (1.0 + factor * elapsedDays / stability).pow(decay).coerceIn(0.0, 1.0)
+    }
+
     const val STABILITY_MIN = 0.001
     const val MIN_DIFFICULTY = 1.0
     const val MAX_DIFFICULTY = 10.0

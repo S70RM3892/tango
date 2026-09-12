@@ -3,6 +3,7 @@ package com.tango.recall.data
 import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
 import com.tango.recall.srs.CardPhase
+import com.tango.recall.srs.Fsrs
 import com.tango.recall.srs.FsrsScheduler
 import com.tango.recall.srs.Rating
 import java.util.Calendar
@@ -12,6 +13,9 @@ data class RelationGroup(
     val reverse: Boolean,
     val partners: List<RelatedNote>,
 )
+
+/** The scheduling state of one card, enough to predict its recall at any time. */
+data class CardMemory(val stability: Double, val lastReview: Long?)
 
 /** One note as drawn on the connection map. */
 data class GraphNode(
@@ -24,7 +28,21 @@ data class GraphNode(
     /** Mean predicted recall across this note's cards, 0..1. Drives how brightly it glows. */
     val strength: Double,
     val isNew: Boolean,
-)
+    /**
+     * Kept so the map can be re-evaluated at a future date without touching the
+     * database again — that is what the time slider scrubs through.
+     */
+    val memory: List<CardMemory> = emptyList(),
+) {
+    /** Mean predicted recall of this note's cards at [at]. */
+    fun strengthAt(at: Long): Double {
+        if (memory.isEmpty()) return 0.0
+        return memory.map { card ->
+            val last = card.lastReview ?: return@map 0.0
+            Fsrs.recallAfter((at - last).toDouble() / 86_400_000.0, card.stability)
+        }.average()
+    }
+}
 
 data class GraphEdge(val from: Long, val to: Long, val typeId: String, val label: String)
 
@@ -33,6 +51,19 @@ data class GraphData(val nodes: List<GraphNode>, val edges: List<GraphEdge>)
 data class DeckCounts(val newCount: Int, val learnCount: Int, val dueCount: Int, val total: Int) {
     val studyable: Int get() = newCount + learnCount + dueCount
 }
+
+data class ExamOutlook(
+    val daysLeft: Int,
+    val studiedCards: Int,
+    val untouchedCards: Int,
+    /** Mean predicted recall across studied cards on the exam date. */
+    val predictedMean: Double,
+    val atRisk: Int,
+    val effectiveRetention: Double,
+    val weakest: List<Pair<Note, Double>>,
+)
+
+data class ConfusionPair(val a: Note, val b: Note, val times: Int, val linked: Boolean)
 
 data class Stats(
     val totalNotes: Int,
@@ -91,7 +122,35 @@ class Repository(private val helper: TangoDb) {
         get() = setting(KEY_MAX_REVIEWS, "200").toIntOrNull() ?: 200
         set(value) = putSetting(KEY_MAX_REVIEWS, value.coerceIn(10, 9999).toString())
 
-    fun scheduler(): FsrsScheduler = FsrsScheduler(desiredRetention = desiredRetention)
+    /** Epoch millis of the exam being prepared for, or 0 when none is set. */
+    var examDate: Long
+        get() = setting(KEY_EXAM_DATE, "0").toLongOrNull() ?: 0L
+        set(value) = putSetting(KEY_EXAM_DATE, value.coerceAtLeast(0L).toString())
+
+    fun daysUntilExam(now: Long = System.currentTimeMillis()): Int? {
+        val exam = examDate
+        if (exam <= 0L) return null
+        return Math.ceil((exam - now).toDouble() / 86_400_000.0).toInt()
+    }
+
+    /**
+     * The retention target actually used for scheduling.
+     *
+     * With an exam set, this ramps from the learner's baseline up towards [EXAM_PEAK_RETENTION]
+     * over the final [RAMP_DAYS] days. Reviewing at a higher target shortens intervals, so
+     * material naturally gets tighter as the date approaches instead of needing a panic
+     * week of cramming. Outside that window nothing changes.
+     */
+    fun effectiveRetention(now: Long = System.currentTimeMillis()): Double {
+        val base = desiredRetention
+        val daysLeft = daysUntilExam(now) ?: return base
+        if (daysLeft > RAMP_DAYS || daysLeft < 0) return base
+        val progress = 1.0 - daysLeft.toDouble() / RAMP_DAYS
+        return (base + (EXAM_PEAK_RETENTION - base) * progress).coerceIn(base, EXAM_PEAK_RETENTION)
+    }
+
+    fun scheduler(now: Long = System.currentTimeMillis()): FsrsScheduler =
+        FsrsScheduler(desiredRetention = effectiveRetention(now))
 
     // ---- decks --------------------------------------------------------------
 
@@ -586,6 +645,7 @@ class Repository(private val helper: TangoDb) {
                 degree = degree[note.id] ?: 0,
                 strength = if (seen.isEmpty()) 0.0 else seen.map { sched.retrievability(it.srs, now) }.average(),
                 isNew = seen.isEmpty(),
+                memory = seen.map { CardMemory(it.srs.stability, it.srs.lastReview) },
             )
         }
 
@@ -593,6 +653,147 @@ class Repository(private val helper: TangoDb) {
             GraphEdge(it.fromNoteId, it.toNoteId, it.typeId, it.type.forward)
         }
         return GraphData(nodes, edges)
+    }
+
+    /**
+     * What the collection is predicted to look like on exam day.
+     *
+     * Ordinary spaced repetition asks "is this due today?". With a fixed date to aim
+     * at, the more useful question is "what will have decayed by then?" — and that is
+     * answered by evaluating the forgetting curve at the exam date rather than now.
+     */
+    fun examOutlook(now: Long = System.currentTimeMillis(), weakestLimit: Int = 15): ExamOutlook? {
+        val exam = examDate
+        if (exam <= 0L) return null
+        val daysLeft = daysUntilExam(now) ?: return null
+
+        val studied = db.rawQuery(
+            "SELECT * FROM cards WHERE suspended=0 AND phase!='NEW'", null,
+        ).mapAll { it.toCard() }
+        val untouched = db.rawQuery(
+            "SELECT COUNT(*) FROM cards WHERE suspended=0 AND phase='NEW'", null,
+        ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+        val target = desiredRetention
+        val predictions = studied.map { card ->
+            val last = card.srs.lastReview
+            val predicted = if (last == null) 0.0
+            else Fsrs.recallAfter((exam - last).toDouble() / 86_400_000.0, card.srs.stability)
+            card to predicted
+        }
+
+        val weakest = predictions.sortedBy { it.second }.take(weakestLimit)
+        val weakestNotes = notes(weakest.map { it.first.noteId })
+
+        return ExamOutlook(
+            daysLeft = daysLeft,
+            studiedCards = studied.size,
+            untouchedCards = untouched,
+            predictedMean = if (predictions.isEmpty()) 0.0 else predictions.map { it.second }.average(),
+            atRisk = predictions.count { it.second < target },
+            effectiveRetention = effectiveRetention(now),
+            weakest = weakest.mapNotNull { (card, r) -> weakestNotes[card.noteId]?.let { it to r } },
+        )
+    }
+
+    /**
+     * A session aimed at the exam rather than at today: the cards predicted weakest on
+     * the day, worst first. New cards are deliberately excluded — those are governed by
+     * the per-deck daily limit and come through the normal queue.
+     */
+    fun buildExamQueue(now: Long = System.currentTimeMillis(), limit: Int = maxReviewsPerDay): List<Long> {
+        val exam = examDate
+        if (exam <= 0L) return emptyList()
+        val target = desiredRetention
+        return db.rawQuery("SELECT * FROM cards WHERE suspended=0 AND phase!='NEW'", null)
+            .mapAll { it.toCard() }
+            .map { card ->
+                val last = card.srs.lastReview
+                card to if (last == null) 0.0
+                else Fsrs.recallAfter((exam - last).toDouble() / 86_400_000.0, card.srs.stability)
+            }
+            .filter { it.second < target }
+            .sortedBy { it.second }
+            .take(limit)
+            .map { it.first.id }
+            .let { spaceSiblingsById(it) }
+    }
+
+    private fun spaceSiblingsById(ids: List<Long>): List<Long> {
+        if (ids.size <= 2) return ids
+        val cards = ids.mapNotNull { card(it) }
+        return spaceSiblings(cards).map { it.id }
+    }
+
+    // ---- confusions ---------------------------------------------------------
+
+    /**
+     * The note whose answer was typed instead of the right one, if any.
+     *
+     * This is what turns a mistake into structure: writing "concede" where "precede"
+     * belonged says something specific about your memory that no generic "wrong"
+     * flag captures.
+     */
+    fun findConfusion(note: Note, templateId: String, typed: String): Note? {
+        if (typed.trim().length < 2) return null
+        val template = note.type.template(templateId) ?: return null
+        val field = template.clozeAnswerField ?: template.answerFields.firstOrNull() ?: return null
+        val chemistry = note.type == NoteType.CHEM_SUBSTANCE || note.type == NoteType.CHEM_REACTION
+        val wanted = normalizeAnswer(typed, chemistry)
+        if (wanted.isEmpty()) return null
+        if (normalizeAnswer(note[field], chemistry) == wanted) return null
+
+        return db.rawQuery(
+            "SELECT * FROM notes WHERE type=? AND id<>? LIMIT 2000",
+            arrayOf(note.typeId, note.id.toString()),
+        ).mapAll { it.toNote() }
+            .firstOrNull { other ->
+                other[field].isNotBlank() && normalizeAnswer(other[field], chemistry) == wanted
+            }
+    }
+
+    /** Log a mix-up and return how many times this pair has now been confused. */
+    fun recordConfusion(noteId: Long, otherNoteId: Long, templateId: String, typed: String): Int {
+        db.insert(
+            "confusions", null,
+            ContentValues().apply {
+                put("noteId", noteId)
+                put("otherNoteId", otherNoteId)
+                put("templateId", templateId)
+                put("typed", typed)
+                put("ts", System.currentTimeMillis())
+            },
+        )
+        return db.rawQuery(
+            "SELECT COUNT(*) FROM confusions WHERE (noteId=? AND otherNoteId=?) OR (noteId=? AND otherNoteId=?)",
+            arrayOf(
+                noteId.toString(), otherNoteId.toString(),
+                otherNoteId.toString(), noteId.toString(),
+            ),
+        ).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+    }
+
+    fun areLinked(a: Long, b: Long): Boolean =
+        db.rawQuery(
+            "SELECT COUNT(*) FROM links WHERE (fromNoteId=? AND toNoteId=?) OR (fromNoteId=? AND toNoteId=?)",
+            arrayOf(a.toString(), b.toString(), b.toString(), a.toString()),
+        ).use { if (it.moveToFirst()) it.getInt(0) > 0 else false }
+
+    /** Pairs mixed up most often, for the statistics screen. */
+    fun confusionPairs(limit: Int = 10): List<ConfusionPair> {
+        val rows = db.rawQuery(
+            """
+            SELECT MIN(noteId, otherNoteId) AS a, MAX(noteId, otherNoteId) AS b, COUNT(*) AS n
+            FROM confusions GROUP BY a, b ORDER BY n DESC LIMIT $limit
+            """.trimIndent(),
+            null,
+        ).mapAll { Triple(it.getLong(0), it.getLong(1), it.getInt(2)) }
+        val involved = notes(rows.flatMap { listOf(it.first, it.second) })
+        return rows.mapNotNull { (a, b, n) ->
+            val first = involved[a] ?: return@mapNotNull null
+            val second = involved[b] ?: return@mapNotNull null
+            ConfusionPair(first, second, n, areLinked(a, b))
+        }
     }
 
     fun transaction(body: () -> Unit) {
@@ -607,5 +808,12 @@ class Repository(private val helper: TangoDb) {
         const val KEY_SHOW_RELATED = "show_related"
         const val KEY_MAX_REVIEWS = "max_reviews"
         const val KEY_SEEDED = "seeded"
+        const val KEY_EXAM_DATE = "exam_date"
+
+        /** How close the target is pushed as the exam arrives. */
+        const val EXAM_PEAK_RETENTION = 0.97
+
+        /** Days before the exam over which the target ramps up. */
+        const val RAMP_DAYS = 60
     }
 }

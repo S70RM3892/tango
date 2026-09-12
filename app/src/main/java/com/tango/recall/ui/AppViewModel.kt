@@ -11,6 +11,9 @@ import com.tango.recall.data.Card
 import com.tango.recall.data.Deck
 import com.tango.recall.data.DeckCounts
 import com.tango.recall.data.AnswerMode
+import com.tango.recall.data.ConfusionPair
+import com.tango.recall.data.ExamOutlook
+import com.tango.recall.data.Grade
 import com.tango.recall.data.GradeResult
 import com.tango.recall.data.GraphData
 import com.tango.recall.data.ImportExport
@@ -32,6 +35,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/**
+ * A mix-up caught in the act: the note whose answer was written instead of the
+ * right one.
+ */
+data class ConfusionHit(val other: Note, val times: Int, val autoLinked: Boolean)
+
 /** Live state of one study session. */
 data class ReviewSession(
     val deckId: Long?,
@@ -45,6 +54,8 @@ data class ReviewSession(
     val grade: GradeResult? = null,
     /** For self-graded cards: which checklist points the learner ticked. */
     val checked: Set<Int> = emptySet(),
+    val confusion: ConfusionHit? = null,
+    val examMode: Boolean = false,
     val previews: Map<Rating, Long> = emptyMap(),
     val answered: Int = 0,
     val correct: Int = 0,
@@ -145,11 +156,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- review -------------------------------------------------------------
 
-    fun startReview(deckId: Long?) = viewModelScope.launch {
+    fun startReview(deckId: Long?, exam: Boolean = false) = viewModelScope.launch {
         busy = true
-        val name = deckId?.let { io { repo.deck(it) }?.name } ?: "すべてのデッキ"
-        val queue = io { repo.buildQueue(deckId) }
-        session = ReviewSession(deckId = deckId, deckName = name, queue = queue)
+        val name = when {
+            exam -> "試験日から逆算"
+            deckId != null -> io { repo.deck(deckId) }?.name ?: "デッキ"
+            else -> "すべてのデッキ"
+        }
+        val queue = if (exam) io { repo.buildExamQueue() } else io { repo.buildQueue(deckId) }
+        session = ReviewSession(deckId = deckId, deckName = name, queue = queue, examMode = exam)
         advance(0)
         busy = false
     }
@@ -178,6 +193,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     typed = "",
                     grade = null,
                     checked = emptySet(),
+                    confusion = null,
                     previews = previews,
                     shownAt = System.currentTimeMillis(),
                 )
@@ -209,6 +225,47 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         session = s.copy(revealed = true, grade = grade)
+
+        val typedModes = card.mode == AnswerMode.TYPE || card.mode == AnswerMode.CLOZE ||
+            card.mode == AnswerMode.NUMERIC
+        if (typedModes && grade?.grade == Grade.WRONG) {
+            viewModelScope.launch { detectConfusion(card, s.typed) }
+        }
+    }
+
+    /**
+     * Work out whether the wrong answer was actually another note's answer, and let
+     * the relation graph grow out of it.
+     *
+     * A single slip only gets offered as a suggestion; a pair mixed up repeatedly is
+     * linked automatically, because by then it is a fact about this learner's memory
+     * rather than a typo.
+     */
+    private suspend fun detectConfusion(card: RenderedCard, typed: String) {
+        val other = io { repo.findConfusion(card.note, card.template.id, typed) } ?: return
+        val times = io { repo.recordConfusion(card.note.id, other.id, card.template.id, typed) }
+        val alreadyLinked = io { repo.areLinked(card.note.id, other.id) }
+        var autoLinked = false
+        if (!alreadyLinked && times >= CONFUSION_LINK_THRESHOLD) {
+            autoLinked = io {
+                repo.addLink(card.note.id, other.id, LinkType.CONFUSABLE, "取り違え ${times} 回")
+            }
+        }
+        val current = session ?: return
+        if (current.current?.card?.id != card.card.id) return
+        session = current.copy(
+            confusion = ConfusionHit(other, times, autoLinked || alreadyLinked),
+        )
+    }
+
+    /** Add the suggested "混同注意" relation by hand. */
+    fun linkConfusion() = viewModelScope.launch {
+        val s = session ?: return@launch
+        val hit = s.confusion ?: return@launch
+        val noteId = s.current?.note?.id ?: return@launch
+        io { repo.addLink(noteId, hit.other.id, LinkType.CONFUSABLE, "取り違え ${hit.times} 回") }
+        session = session?.copy(confusion = hit.copy(autoLinked = true))
+        toast = "「混同注意」でつなぎました"
     }
 
     /** Tick or untick one point on a self-graded card. */
@@ -335,8 +392,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun graph(deckId: Long?): GraphData = io { repo.graph(deckId) }
 
+    // ---- exam countdown -----------------------------------------------------
+
+    var examOutlook by mutableStateOf<ExamOutlook?>(null); private set
+
+    val examDate: Long get() = repo.examDate
+
+    fun loadExamOutlook() = viewModelScope.launch { examOutlook = io { repo.examOutlook() } }
+
+    fun setExamDate(value: Long) = viewModelScope.launch {
+        io { repo.examDate = value }
+        examOutlook = io { repo.examOutlook() }
+        refresh()
+    }
+
+    suspend fun confusionPairs(): List<ConfusionPair> = io { repo.confusionPairs() }
+
     companion object {
         private const val REQUEUE_HORIZON_MS = 20 * 60_000L
         private const val REQUEUE_GAP = 8
+
+        /** Mix-ups needed before a pair is linked without being asked. */
+        private const val CONFUSION_LINK_THRESHOLD = 2
     }
 }

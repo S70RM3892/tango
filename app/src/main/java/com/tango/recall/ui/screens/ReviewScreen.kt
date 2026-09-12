@@ -64,11 +64,12 @@ import com.tango.recall.data.RenderedCard
 import com.tango.recall.data.humanDelay
 import com.tango.recall.srs.Rating
 import com.tango.recall.ui.AppViewModel
+import com.tango.recall.ui.ConfusionHit
 import com.tango.recall.ui.ReviewSession
 
 @Composable
-fun ReviewScreen(vm: AppViewModel, nav: NavController, deckId: Long?) {
-    LaunchedEffect(deckId) { vm.startReview(deckId) }
+fun ReviewScreen(vm: AppViewModel, nav: NavController, deckId: Long?, exam: Boolean = false) {
+    LaunchedEffect(deckId, exam) { vm.startReview(deckId, exam) }
     val session = vm.session
     var peek by remember { mutableStateOf<Note?>(null) }
 
@@ -150,6 +151,10 @@ private fun CardPane(session: ReviewSession, vm: AppViewModel, onPeek: (Note) ->
             if (session.revealed) {
                 Spacer(Modifier.height(20.dp))
                 session.grade?.let { GradeBanner(it.grade, it.comment) }
+                session.confusion?.let {
+                    Spacer(Modifier.height(12.dp))
+                    ConfusionBlock(it, vm)
+                }
                 Spacer(Modifier.height(12.dp))
                 AnswerBlock(card, typed = session.typed)
 
@@ -291,6 +296,51 @@ private fun GradeBanner(grade: Grade, comment: String) {
         Column(Modifier.padding(12.dp)) {
             Text(title, style = MaterialTheme.typography.titleMedium, color = content)
             Text(comment, style = MaterialTheme.typography.bodyMedium, color = content)
+        }
+    }
+}
+
+/**
+ * What the wrong answer actually was.
+ *
+ * Writing one note's answer where another belonged is a specific, repeatable fact
+ * about this learner's memory, so it is offered as a relation rather than thrown
+ * away as a generic "wrong".
+ */
+@Composable
+private fun ConfusionBlock(hit: ConfusionHit, vm: AppViewModel) {
+    SectionCard {
+        SectionTitle("取り違えたのはこれですね")
+        Spacer(Modifier.height(8.dp))
+        Text(hit.other.title(), style = MaterialTheme.typography.titleMedium)
+        val sub = hit.other.subtitle()
+        if (sub.isNotBlank()) {
+            Text(
+                sub,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        if (hit.autoLinked) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Pill("混同注意でつながりました")
+                Text(
+                    "  ${hit.times} 回目",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "次からは、どちらを復習しても相手が一緒に出てきます。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            OutlinedButton(onClick = { vm.linkConfusion() }, modifier = Modifier.fillMaxWidth()) {
+                Text("「混同注意」でつなぐ")
+            }
         }
     }
 }

@@ -12,6 +12,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -20,6 +23,8 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,6 +36,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.tango.recall.ui.AppViewModel
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+import java.util.TimeZone
 import kotlin.math.roundToInt
 
 @Composable
@@ -38,8 +47,10 @@ fun SettingsScreen(vm: AppViewModel, nav: NavController) {
     var retention by remember { mutableStateOf(vm.desiredRetention.toFloat()) }
     var maxReviews by remember { mutableStateOf(vm.maxReviewsPerDay.toFloat()) }
     var showRelated by remember { mutableStateOf(vm.showRelated) }
+    var pickingDate by remember { mutableStateOf(false) }
     val snackbar = remember { SnackbarHostState() }
 
+    LaunchedEffect(Unit) { vm.loadExamOutlook() }
     LaunchedEffect(vm.toast) { vm.toast?.let { snackbar.showSnackbar(it); vm.toast = null } }
 
     val backupExport = rememberLauncherForActivityResult(
@@ -58,6 +69,43 @@ fun SettingsScreen(vm: AppViewModel, nav: NavController) {
             Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            SectionCard {
+                SectionTitle("試験日")
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    if (vm.examDate > 0) formatExamDate(vm.examDate) else "設定されていません",
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "設定すると、試験日の時点で覚えていられるかどうかで復習を組み立てます。" +
+                        "残り60日を切ると目標定着率を自動で ${(com.tango.recall.data.Repository.EXAM_PEAK_RETENTION * 100).toInt()}% まで" +
+                        "少しずつ引き上げ、間隔を詰めていきます。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                vm.examOutlook?.let { outlook ->
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "いまの目標定着率 ${(outlook.effectiveRetention * 100).roundToInt()}%" +
+                            "（試験まで ${outlook.daysLeft} 日）",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(onClick = { pickingDate = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (vm.examDate > 0) "試験日を変更" else "試験日を設定")
+                }
+                if (vm.examDate > 0) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { vm.setExamDate(0L) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("試験日を解除") }
+                }
+            }
+
             SectionCard {
                 SectionTitle("目標とする定着率：${(retention * 100).roundToInt()}%")
                 Slider(
@@ -139,4 +187,45 @@ fun SettingsScreen(vm: AppViewModel, nav: NavController) {
             Spacer(Modifier.height(24.dp))
         }
     }
+
+    if (pickingDate) {
+        ExamDatePicker(
+            initial = vm.examDate,
+            onDismiss = { pickingDate = false },
+            onPick = { picked -> pickingDate = false; vm.setExamDate(picked) },
+        )
+    }
 }
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExamDatePicker(initial: Long, onDismiss: () -> Unit, onPick: (Long) -> Unit) {
+    val state = rememberDatePickerState(
+        initialSelectedDateMillis = initial.takeIf { it > 0 } ?: System.currentTimeMillis(),
+    )
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(
+                onClick = { state.selectedDateMillis?.let { onPick(toLocalExamMoment(it)) } },
+                enabled = state.selectedDateMillis != null,
+            ) { Text("決定") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("やめる") } },
+    ) { DatePicker(state) }
+}
+
+/**
+ * The picker hands back UTC midnight; treat it as the morning of that day locally, so
+ * "days until the exam" does not come out a day off either side of the date line.
+ */
+private fun toLocalExamMoment(utcMidnight: Long): Long {
+    val utc = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply { timeInMillis = utcMidnight }
+    return Calendar.getInstance().apply {
+        clear()
+        set(utc.get(Calendar.YEAR), utc.get(Calendar.MONTH), utc.get(Calendar.DAY_OF_MONTH), 9, 0, 0)
+    }.timeInMillis
+}
+
+private fun formatExamDate(millis: Long): String =
+    SimpleDateFormat("yyyy年M月d日", Locale.JAPAN).format(millis)

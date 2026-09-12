@@ -32,6 +32,8 @@ class MigrationTest {
         context.deleteDatabase(TangoDb.DB_NAME)
     }
 
+    private fun Repository(context: Application) = com.tango.recall.data.Repository(TangoDb(context))
+
     /** Recreate exactly the schema that version 1 wrote. */
     private fun createVersion1Database(): SQLiteDatabase {
         val path = context.getDatabasePath(TangoDb.DB_NAME)
@@ -96,7 +98,7 @@ class MigrationTest {
         )
         old.close()
 
-        val repo = Repository(TangoDb(context))
+        val repo = Repository(context)
 
         val deck = repo.listDecks().single()
         assertEquals("英単語", deck.name)
@@ -119,7 +121,7 @@ class MigrationTest {
     @Test
     fun theUpgradedDatabaseCanStillTakeNewWrites() {
         createVersion1Database().close()
-        val repo = Repository(TangoDb(context))
+        val repo = Repository(context)
         val deckId = repo.saveDeck(
             com.tango.recall.data.Deck(
                 name = "新デッキ",
@@ -131,9 +133,67 @@ class MigrationTest {
         assertTrue(repo.deck(deckId)!!.relationQuiz)
     }
 
+    /** Build the schema version 2 shipped, i.e. what is on a device running v1.2. */
+    private fun createVersion2Database(): SQLiteDatabase {
+        val db = createVersion1Database()
+        db.execSQL("ALTER TABLE decks ADD COLUMN relationQuiz INTEGER NOT NULL DEFAULT 0")
+        db.version = 2
+        return db
+    }
+
+    @Test
+    fun upgradingFromTheReleasedVersionKeepsEverythingAndAddsConfusions() {
+        val old = createVersion2Database()
+        old.execSQL(
+            "INSERT INTO decks(name, noteType, enabledTemplates, newPerDay, relationQuiz, created) " +
+                "VALUES('英単語', 'english', '[\"en_ja\",\"ja_en\"]', 15, 1, 1000)"
+        )
+        old.execSQL(
+            "INSERT INTO notes(deckId, type, fields, tags, created, modified) " +
+                "VALUES(1, 'english', '{\"word\":\"precede\",\"meaning\":\"先行する\"}', '', 1000, 1000)"
+        )
+        old.execSQL(
+            "INSERT INTO notes(deckId, type, fields, tags, created, modified) " +
+                "VALUES(1, 'english', '{\"word\":\"concede\",\"meaning\":\"認める\"}', '', 1000, 1000)"
+        )
+        old.execSQL(
+            "INSERT INTO cards(noteId, deckId, templateId, stability, difficulty, due, lastReview, " +
+                "phase, step, reps, lapses, suspended) " +
+                "VALUES(1, 1, 'ja_en', 33.0, 4.0, 2000, 1500, 'REVIEW', 0, 9, 2, 0)"
+        )
+        old.close()
+
+        val repo = Repository(context)
+
+        // Nothing from before is disturbed...
+        val deck = repo.listDecks().single()
+        assertTrue("the relation-quiz setting must survive", deck.relationQuiz)
+        assertEquals(2, repo.listNotes(deck.id, "").size)
+        val card = repo.cardsOfNote(repo.listNotes(deck.id, "").first { it.title() == "precede" }.id)
+            .single { it.templateId == "ja_en" }
+        assertEquals(33.0, card.srs.stability, 1e-9)
+        assertEquals(9, card.srs.reps)
+
+        // ...and the new table is there and usable.
+        val precede = repo.listNotes(deck.id, "").single { it.title() == "precede" }
+        val concede = repo.listNotes(deck.id, "").single { it.title() == "concede" }
+        assertEquals(1, repo.recordConfusion(precede.id, concede.id, "ja_en", "concede"))
+        assertEquals(1, repo.confusionPairs().size)
+    }
+
+    @Test
+    fun upgradingFromVersionTwoDoesNotReapplyTheVersionTwoStep() {
+        // Re-running the v1 migration on a v2 database would fail on a duplicate column.
+        createVersion2Database().close()
+        val repo = Repository(context)
+        assertEquals(0, repo.listDecks().size)
+        repo.examDate = 1_800_000_000_000L
+        assertEquals(1_800_000_000_000L, Repository(context).examDate)
+    }
+
     @Test
     fun aFreshInstallStartsAtTheCurrentVersion() {
-        val repo = Repository(TangoDb(context))
+        val repo = Repository(context)
         repo.listDecks()
         assertEquals(TangoDb.DB_VERSION, context.getDatabasePath(TangoDb.DB_NAME).let {
             SQLiteDatabase.openDatabase(it.path, null, SQLiteDatabase.OPEN_READONLY).use { db -> db.version }

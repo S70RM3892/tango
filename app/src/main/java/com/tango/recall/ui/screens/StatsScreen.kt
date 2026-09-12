@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.tango.recall.data.ConfusionPair
 import com.tango.recall.data.Note
 import com.tango.recall.ui.AppViewModel
 import kotlin.math.roundToInt
@@ -36,9 +37,11 @@ import kotlin.math.roundToInt
 @Composable
 fun StatsScreen(vm: AppViewModel, nav: NavController) {
     var weakest by remember { mutableStateOf<List<Pair<Note, Double>>>(emptyList()) }
+    var confusions by remember { mutableStateOf<List<ConfusionPair>>(emptyList()) }
     LaunchedEffect(Unit) {
         vm.loadStats()
         weakest = vm.weakest()
+        confusions = vm.confusionPairs()
     }
     val stats = vm.stats
 
@@ -121,6 +124,42 @@ fun StatsScreen(vm: AppViewModel, nav: NavController) {
                                 )
                             }
                             Pill("${(r * 100).roundToInt()}%")
+                        }
+                    }
+                }
+            }
+
+            if (confusions.isNotEmpty()) {
+                item {
+                    SectionTitle("取り違えた組")
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "答えを書き間違えたとき、それが別のノートの答えだった回数です。" +
+                            "2回以上まちがえた組は自動で「混同注意」でつながります。",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                items(confusions, key = { it.a.id * 1_000_003 + it.b.id }) { pair ->
+                    SectionCard {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    "${pair.a.title()} ⇄ ${pair.b.title()}",
+                                    style = MaterialTheme.typography.titleMedium,
+                                )
+                                Text(
+                                    if (pair.linked) "「混同注意」でつながっています"
+                                    else "まだつながっていません",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            Pill(
+                                "${pair.times} 回",
+                                MaterialTheme.colorScheme.tertiaryContainer,
+                                MaterialTheme.colorScheme.onTertiaryContainer,
+                            )
                         }
                     }
                 }

@@ -203,19 +203,19 @@ fun gradeTyped(input: String, expected: String, chemistry: Boolean = false): Gra
     val typed = input.trim()
     if (typed.isEmpty()) return GradeResult(Grade.WRONG, expected, "未入力")
 
-    val normTyped = normalize(typed, chemistry)
+    val normTyped = normalizeAnswer(typed, chemistry)
 
     for (alt in alternatives) {
         if (typed == alt) return GradeResult(Grade.CORRECT, expected, "正解")
     }
     for (alt in alternatives) {
-        if (normTyped == normalize(alt, chemistry)) {
+        if (normTyped == normalizeAnswer(alt, chemistry)) {
             val comment = if (chemistry) "正解（表記ゆれを許容：元素記号の大文字・小文字に注意）" else "正解"
             return GradeResult(Grade.CORRECT, expected, comment)
         }
     }
 
-    val best = alternatives.minOf { levenshtein(normTyped, normalize(it, chemistry)) }
+    val best = alternatives.minOf { levenshtein(normTyped, normalizeAnswer(it, chemistry)) }
     val tolerance = if (chemistry) 1 else min(2, max(1, normTyped.length / 4))
     return if (best <= tolerance) {
         GradeResult(Grade.CLOSE, expected, "惜しい（${best}文字違い）")
@@ -224,7 +224,7 @@ fun gradeTyped(input: String, expected: String, chemistry: Boolean = false): Gra
     }
 }
 
-private fun normalize(s: String, chemistry: Boolean): String {
+internal fun normalizeAnswer(s: String, chemistry: Boolean): String {
     var t = Normalizer.normalize(s, Normalizer.Form.NFKC).trim()
     if (chemistry) {
         // Subscript digits, centre dots and arrows all have several common spellings.

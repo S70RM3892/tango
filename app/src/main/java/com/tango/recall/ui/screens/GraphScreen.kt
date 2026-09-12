@@ -42,6 +42,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -79,6 +80,7 @@ import com.tango.recall.ui.AppViewModel
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
+import kotlin.math.roundToInt
 import kotlin.math.sin
 import kotlin.math.sqrt
 
@@ -108,6 +110,7 @@ fun GraphScreen(vm: AppViewModel, nav: NavController, initialDeckId: Long?) {
     var loading by remember { mutableStateOf(true) }
 
     var viewport by remember { mutableStateOf(Size.Zero) }
+    var horizonIndex by remember { mutableStateOf(0f) }
     var searching by remember { mutableStateOf(false) }
     var query by remember { mutableStateOf("") }
     var centreOn by remember { mutableStateOf<Long?>(null) }
@@ -203,6 +206,18 @@ fun GraphScreen(vm: AppViewModel, nav: NavController, initialDeckId: Long?) {
                 }
             }
 
+            // Pinned once per visit: reading the clock during composition would make
+            // the horizon a new value on every frame and recompose the canvas with it.
+            val openedAt = remember { System.currentTimeMillis() }
+            val examDays = remember(vm.examDate, openedAt) {
+                vm.examDate.takeIf { it > 0 }
+                    ?.let { ((it - openedAt) / 86_400_000L).toInt() }
+                    ?.takeIf { it > 0 }
+            }
+            val stops = remember(examDays) { horizonStops(examDays) }
+            val horizonDays = stops[horizonIndex.roundToInt().coerceIn(stops.indices)]
+            val atTime = openedAt + horizonDays * 86_400_000L
+
             Box(
                 Modifier.weight(1f).fillMaxWidth()
                     .onSizeChanged { viewport = Size(it.width.toFloat(), it.height.toFloat()) },
@@ -229,6 +244,7 @@ fun GraphScreen(vm: AppViewModel, nav: NavController, initialDeckId: Long?) {
                     else -> GraphView(
                         graph = graph,
                         viewport = viewport,
+                        atTime = atTime,
                         centreOn = centreOn,
                         onCentred = { centreOn = null },
                         onOpenNote = { node -> nav.navigate(Routes.note(node.noteId, node.deckId)) },
@@ -236,6 +252,19 @@ fun GraphScreen(vm: AppViewModel, nav: NavController, initialDeckId: Long?) {
                     )
                 }
             }
+
+            TimeSlider(
+                stops = stops,
+                index = horizonIndex,
+                onIndexChange = { horizonIndex = it },
+                horizonDays = horizonDays,
+                examDays = examDays,
+                meanStrength = laid?.nodes
+                    ?.filterNot { it.node.isNew }
+                    ?.map { it.node.strengthAt(atTime) }
+                    ?.takeIf { it.isNotEmpty() }?.average(),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            )
 
             laid?.let { Legend(it, Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)) }
         }
@@ -279,6 +308,7 @@ private fun SearchPanel(
 private fun GraphView(
     graph: LaidOutGraph,
     viewport: Size,
+    atTime: Long,
     centreOn: Long?,
     onCentred: () -> Unit,
     onOpenNote: (com.tango.recall.data.GraphNode) -> Unit,
@@ -410,7 +440,7 @@ private fun GraphView(
                 val isNeighbour = index in neighbours
                 val isDragged = index == dragging
                 // Never studied: outline only. Fading: the glow goes before the outline.
-                val vitality = if (node.isNew) 0f else (0.25f + 0.75f * node.strength.toFloat())
+                val vitality = if (node.isNew) 0f else (0.25f + 0.75f * node.strengthAt(atTime).toFloat())
                 val dimmed = selected != null && !isSelected && !isNeighbour
 
                 if (glowEverything || isSelected || isNeighbour || node.degree >= 4) {
@@ -499,6 +529,70 @@ private fun GraphView(
                 onDismiss = { selected = null },
             )
         }
+    }
+}
+
+/**
+ * The dates the map can be scrubbed to.
+ *
+ * The exam is inserted as its own stop when one is set, because "what will this look
+ * like on the day" is the question the whole countdown exists to answer.
+ */
+internal fun horizonStops(examDays: Int?): List<Int> =
+    buildList {
+        addAll(listOf(0, 3, 7, 14, 30, 60, 90))
+        if (examDays != null && examDays > 0) add(examDays)
+    }.distinct().sorted()
+
+/**
+ * Scrub the map forward in time.
+ *
+ * Nothing is scheduled or changed — the forgetting curve is simply evaluated at a
+ * later date, so the dim patches show what will have gone by then if left alone.
+ */
+@Composable
+private fun TimeSlider(
+    stops: List<Int>,
+    index: Float,
+    onIndexChange: (Float) -> Unit,
+    horizonDays: Int,
+    examDays: Int?,
+    meanStrength: Double?,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                when {
+                    horizonDays == 0 -> "いまの記憶"
+                    examDays != null && horizonDays == examDays -> "試験日（${horizonDays}日後）の予測"
+                    else -> "${horizonDays}日後の予測"
+                },
+                style = MaterialTheme.typography.labelLarge,
+            )
+            meanStrength?.let {
+                Text(
+                    "平均 ${(it * 100).roundToInt()}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        Slider(
+            value = index,
+            onValueChange = onIndexChange,
+            valueRange = 0f..(stops.size - 1).toFloat(),
+            steps = (stops.size - 2).coerceAtLeast(0),
+        )
+        Text(
+            "動かすと、そのままにした場合に何が消えていくかが見えます。",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
     }
 }
 
