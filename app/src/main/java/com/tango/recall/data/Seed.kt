@@ -32,6 +32,7 @@ object Seed {
         "chem_calc_extra" to ::seedMoreChemCalc,
         "math" to ::seedMath,
         "physics_atomic" to ::seedPhysics,
+        "word_list" to ::seedWordList,
     )
 
     /** What the starter content consisted of before it was split into packs. */

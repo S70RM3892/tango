@@ -762,7 +762,7 @@ class Repository(private val helper: TangoDb) {
         deckId: Long?,
         subject: Subject? = null,
         now: Long = System.currentTimeMillis(),
-        limit: Int = 500,
+        limit: Int = 900,
     ): GraphData {
         val notes = listNotes(deckId, "", limit, subject)
         if (notes.isEmpty()) return GraphData(emptyList(), emptyList())

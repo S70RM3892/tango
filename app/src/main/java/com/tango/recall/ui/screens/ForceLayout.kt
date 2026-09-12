@@ -173,13 +173,20 @@ object ForceLayout {
         val spanY = (maxY - minY).takeIf { abs(it) > 0.01f } ?: 1f
         val marginX = width * MARGIN
         val marginY = height * MARGIN
-        // One scale for both axes: stretching the drawing would distort the clusters.
-        val scale = minOf((width - 2 * marginX) / spanX, (height - 2 * marginY) / spanY)
-        val offsetX = (width - spanX * scale) / 2
-        val offsetY = (height - spanY * scale) / 2
+        val fitX = (width - 2 * marginX) / spanX
+        val fitY = (height - 2 * marginY) / spanY
+        // Mostly one scale for both axes, because stretching distorts the clusters. But
+        // a large graph settles into a disc, and a disc on a tall screen leaves the top
+        // and bottom empty, so each axis may be stretched up to STRETCH times the
+        // common scale to reach the edges. Past that, the shape matters more.
+        val common = minOf(fitX, fitY)
+        val scaleX = minOf(fitX, common * STRETCH)
+        val scaleY = minOf(fitY, common * STRETCH)
+        val offsetX = (width - spanX * scaleX) / 2
+        val offsetY = (height - spanY * scaleY) / 2
         for (i in x.indices) {
-            x[i] = offsetX + (x[i] - minX) * scale
-            y[i] = offsetY + (y[i] - minY) * scale
+            x[i] = offsetX + (x[i] - minX) * scaleX
+            y[i] = offsetY + (y[i] - minY) * scaleY
         }
     }
 
@@ -249,4 +256,7 @@ object ForceLayout {
     private const val EDGE_MARGIN = 0.035f
     private const val COOLING = 0.985f
     private const val MARGIN = 0.06f
+
+    /** How far one axis may be stretched past the other to reach the screen edges. */
+    private const val STRETCH = 1.4f
 }

@@ -77,6 +77,11 @@ internal fun seedMoreEisakubun(s: Seeder) {
     )
 
     s.link(toshi, kikeba, LinkType.SAME_GROUP, "どちらも the 比較級, the 比較級。片方を思い出せばもう片方も出る")
+    // The original five included one sentence with no partner; give it one.
+    val byJa = s.repo.listNotes(deckId, "", Int.MAX_VALUE).associateBy { it.title() }
+    byJa["本を読むのは、他人の頭で考えることだ。"]?.let { reading ->
+        s.link(reading.id, narau, LinkType.SAME_GROUP, "どちらも「読む・習う」を主語に立てた一般論")
+    }
     s.link(narau, kuchibeta, LinkType.SAME_GROUP, "日本語を説明に開いてから英語にする型")
     s.link(unnoyosa, shidai, LinkType.CONTRAST, "理由を限定する / 条件を主語に立てる")
     s.link(tashikameru, kikeba, LinkType.CONFUSABLE, "not … until と the less …。どちらも否定の方向を取り違えやすい")
