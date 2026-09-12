@@ -7,7 +7,7 @@ name: Release
 on:
   push:
     branches: ["**"]
-    paths: [".github/release.txt"]
+    paths: [".github/release.txt", ".github/release-notes/**"]
   workflow_dispatch:
     inputs:
       tag:
@@ -39,14 +39,23 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "apk=Tango-${tag#v}.apk" >> "$GITHUB_OUTPUT"
 
-      - name: Skip if this release already exists
+      # An existing release is never rebuilt — the published APK must keep matching
+      # the commit it was built from — but its notes can still be corrected.
+      - name: Refresh the notes if this release already exists
         id: existing
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
         run: |
-          if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+          if gh release view "$TAG" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::${{ steps.version.outputs.tag }} is already released; nothing to do."
+            notes=".github/release-notes/${TAG}.md"
+            if [ -f "$notes" ]; then
+              gh release edit "$TAG" --notes-file "$notes"
+              echo "::notice::$TAG already exists; refreshed its release notes."
+            else
+              echo "::notice::$TAG already exists and has no notes file; nothing to do."
+            fi
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
