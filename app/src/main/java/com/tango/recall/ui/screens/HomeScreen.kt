@@ -97,10 +97,16 @@ fun HomeScreen(vm: AppViewModel, nav: NavController) {
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("すべてまとめて学習") }
                     Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = { nav.navigate(Routes.graph(null)) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("つながり地図を見る") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { nav.navigate(Routes.graph(null)) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("つながり地図") }
+                        OutlinedButton(
+                            onClick = { nav.navigate(Routes.UNIVERSITIES) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("国公立大学") }
+                    }
                 }
             }
 

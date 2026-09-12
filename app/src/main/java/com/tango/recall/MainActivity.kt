@@ -26,6 +26,7 @@ import com.tango.recall.ui.screens.NoteScreen
 import com.tango.recall.ui.screens.ReviewScreen
 import com.tango.recall.ui.screens.SettingsScreen
 import com.tango.recall.ui.screens.StatsScreen
+import com.tango.recall.ui.screens.UniversityScreen
 import com.tango.recall.ui.theme.TangoTheme
 
 class MainActivity : ComponentActivity() {
@@ -53,6 +54,7 @@ object Routes {
     const val NOTE = "note/{noteId}/{deckId}"
     const val EXAM_REVIEW = "review/exam"
     const val GRAPH = "graph/{deckId}"
+    const val UNIVERSITIES = "universities"
     const val STATS = "stats"
     const val SETTINGS = "settings"
 
@@ -116,6 +118,7 @@ fun TangoApp() {
                 GraphScreen(vm, nav, raw.takeIf { it >= 0 })
             }
             composable(Routes.EXAM_REVIEW) { ReviewScreen(vm, nav, deckId = null, exam = true) }
+            composable(Routes.UNIVERSITIES) { UniversityScreen(vm, nav) }
             composable(Routes.STATS) { StatsScreen(vm, nav) }
             composable(Routes.SETTINGS) { SettingsScreen(vm, nav) }
         }

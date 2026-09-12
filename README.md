@@ -84,6 +84,29 @@ Android アプリ（Kotlin / Jetpack Compose）。データはすべて端末内
 Anki では [FSRS Helper](https://github.com/open-spaced-repetition/fsrs4anki-helper) に前倒し・先送りはありますが
 試験日駆動ではなく、[締切・試験日の機能は要望として挙がっている段階](https://forums.ankiweb.net/t/deadline-exam-date-feature/56675)です。
 
+## 国公立大学データベース
+
+全国の国立・公立大学を**学科単位**で収録し、日本地図の上で絞り込めます。
+
+- **179 大学 / 1,318 学科 / 入学定員 130,612 人**（募集停止の学科は除外済み）
+- 地図の**都道府県をタップ**すると絞り込まれ、地図はその条件での定員に塗り直されます。
+  地図が絵であると同時に操作子になっています。ピンチで拡大、沖縄は慣例どおりインセット表示
+- **系統の構成バー**（情報／工学／理学／医学…）をタップしても絞り込めます
+- 設置（国立・公立）、地方、系統、キーワードで絞り込み、定員・大学名・所在地でソート
+- 気になる学科は★で**志望校リスト**に入れて絞り込めます
+
+系統は学部名・学科名から機械的に分類しています（「情報」は 117 学科・73 大学）。
+定員は**絞り込み後の学科だけ**を合計するので、たとえば「情報」で絞って定員順に並べると
+情報系をどれだけ多く採る大学かの順になります。
+
+**出典**
+- 大学データ: [文部科学省「令和7年度 全国大学一覧」](https://www.mext.go.jp/a_menu/koutou/ichiran/mext_00050.html)
+- 地図データ: 地球地図日本（国土地理院）。非営利利用では出典明記が条件です。
+  営利目的で配布する場合は著作権者への利用報告が別途必要になります
+
+偏差値や入試の配点は含まれていません。偏差値は予備校各社の私有データで、
+配点は大学ごとの募集要項にしかないためです。志望校の配点は自分で入力してください。
+
 ## 復習アルゴリズム
 
 [FSRS-6](https://github.com/open-spaced-repetition/awesome-fsrs/wiki/The-Algorithm)
@@ -107,6 +130,7 @@ Anki では [FSRS Helper](https://github.com/open-spaced-repetition/fsrs4anki-he
 | ホーム | デッキ一覧、新規／学習中／復習の枚数、まとめて学習 |
 | 学習 | 出題 → 入力／想起 → 答え合わせ → 4段階評価（各ボタンに次回間隔を表示）→ つながり |
 | つながり地図 | 全ノートの関係図。ピンチで拡大、ノードをタップで詳細、デッキで絞り込み |
+| 国公立大学 | 日本地図で絞り込む大学データベース。系統・地方・定員でソート |
 | ノート編集 | 欄の編集、タグ、生成されるカードの確認、関係の追加・削除、関連候補 |
 | 一覧 | 全文検索（語・意味・化学式・タグ） |
 | デッキ設定 | 出題する向き、1日の新規上限、TSV/CSV の取り込み・書き出し |
@@ -129,7 +153,7 @@ Anki では [FSRS Helper](https://github.com/open-spaced-repetition/fsrs4anki-he
 ```bash
 ./gradlew assembleDebug        # app/build/outputs/apk/debug/app-debug.apk
 ./gradlew assembleRelease      # app/build/outputs/apk/release/app-release.apk
-./gradlew testDebugUnitTest    # 121 件のユニットテスト
+./gradlew testDebugUnitTest    # 143 件のユニットテスト
 ```
 
 `git push` すると GitHub Actions（`.github/workflows/android.yml`）が同じものをビルドし、
@@ -156,6 +180,10 @@ app/src/main/java/com/tango/recall/
   ui/screens/GraphCamera.kt  地図の拡大・移動の演算（テストで固定）
   ui/screens/GraphFilters.kt 周辺だけ表示・孤立ノート・検索
   ui/screens/GraphScreen.kt  つながり地図の描画と操作
+  data/Universities.kt       大学データの読み込み・絞り込み・集計
+  ui/screens/JapanMap.kt     日本地図の読み込みと当たり判定
+  ui/screens/UniversityScreen.kt  大学データベースの画面
+  assets/                    同梱データ（大学一覧・日本地図）
   ui/                      Compose の画面
 ```
 

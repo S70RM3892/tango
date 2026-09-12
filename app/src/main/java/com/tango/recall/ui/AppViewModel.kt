@@ -2,16 +2,17 @@ package com.tango.recall.ui
 
 import android.app.Application
 import android.net.Uri
-import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
+import com.tango.recall.data.AnswerMode
 import com.tango.recall.data.Card
+import com.tango.recall.data.ConfusionPair
 import com.tango.recall.data.Deck
 import com.tango.recall.data.DeckCounts
-import com.tango.recall.data.AnswerMode
-import com.tango.recall.data.ConfusionPair
+import com.tango.recall.data.Department
 import com.tango.recall.data.ExamOutlook
 import com.tango.recall.data.Grade
 import com.tango.recall.data.GradeResult
@@ -27,10 +28,13 @@ import com.tango.recall.data.Repository
 import com.tango.recall.data.Seed
 import com.tango.recall.data.Stats
 import com.tango.recall.data.TangoDb
+import com.tango.recall.data.Universities
 import com.tango.recall.data.gradeNumeric
 import com.tango.recall.data.gradeSelfCheck
 import com.tango.recall.data.gradeTyped
 import com.tango.recall.srs.Rating
+import com.tango.recall.ui.screens.JapanMap
+import com.tango.recall.ui.screens.JapanMapLoader
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -407,6 +411,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun confusionPairs(): List<ConfusionPair> = io { repo.confusionPairs() }
+
+    // ---- the university database --------------------------------------------
+
+    var departments by mutableStateOf<List<Department>>(emptyList()); private set
+    var japanMap by mutableStateOf(JapanMap.Empty); private set
+    var shortlist by mutableStateOf<Set<String>>(emptySet()); private set
+    var universitiesLoading by mutableStateOf(false); private set
+
+    /** Read the bundled tables once; both are small enough to keep in memory. */
+    fun loadUniversities() = viewModelScope.launch {
+        if (departments.isNotEmpty()) return@launch
+        universitiesLoading = true
+        val assets = getApplication<Application>().assets
+        departments = io {
+            assets.open(Universities.ASSET).bufferedReader()
+                .useLines { Universities.parse(it) }
+        }
+        japanMap = io {
+            assets.open(JapanMapLoader.ASSET).bufferedReader()
+                .useLines { JapanMapLoader.parse(it) }
+        }
+        shortlist = io { repo.shortlist }
+        universitiesLoading = false
+    }
+
+    fun toggleShortlist(department: Department) = viewModelScope.launch {
+        val added = io { repo.toggleShortlist(department.key) }
+        shortlist = io { repo.shortlist }
+        toast = if (added) "志望校リストに追加しました" else "志望校リストから外しました"
+    }
 
     companion object {
         private const val REQUEUE_HORIZON_MS = 20 * 60_000L

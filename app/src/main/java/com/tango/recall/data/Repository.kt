@@ -149,6 +149,18 @@ class Repository(private val helper: TangoDb) {
         return (base + (EXAM_PEAK_RETENTION - base) * progress).coerceIn(base, EXAM_PEAK_RETENTION)
     }
 
+    /** Departments the learner has shortlisted, by [Department.key]. */
+    var shortlist: Set<String>
+        get() = setting(KEY_SHORTLIST, "[]").toStringSet()
+        set(value) = putSetting(KEY_SHORTLIST, value.toJsonArray())
+
+    fun toggleShortlist(key: String): Boolean {
+        val current = shortlist
+        val added = key !in current
+        shortlist = if (added) current + key else current - key
+        return added
+    }
+
     fun scheduler(now: Long = System.currentTimeMillis()): FsrsScheduler =
         FsrsScheduler(desiredRetention = effectiveRetention(now))
 
@@ -809,6 +821,7 @@ class Repository(private val helper: TangoDb) {
         const val KEY_MAX_REVIEWS = "max_reviews"
         const val KEY_SEEDED = "seeded"
         const val KEY_EXAM_DATE = "exam_date"
+        const val KEY_SHORTLIST = "shortlist"
 
         /** How close the target is pushed as the exam arrives. */
         const val EXAM_PEAK_RETENTION = 0.97
