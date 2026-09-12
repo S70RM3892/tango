@@ -51,12 +51,12 @@ class SeedPackTest {
     fun aPackTheLearnerDoesNotHaveYetIsInstalledLater() {
         Seed.populate(repo)
         val before = noteCount()
-        val calcNotes = repo.listNotes(null, "", Int.MAX_VALUE).count { it.typeId == "chem_calc" }
-        assertTrue(calcNotes > 0)
+        // Translation into Japanese comes from exactly one pack, so removing those
+        // notes reproduces a phone that was set up before that pack existed.
+        assertTrue(repo.listNotes(null, "", Int.MAX_VALUE).any { it.typeId == "wayaku" })
 
-        // Simulate the state of a phone that was set up before this pack existed.
-        repo.raw().execSQL("DELETE FROM notes WHERE type='chem_calc'")
-        repo.installedSeedPacks = repo.installedSeedPacks - "chem_calc"
+        repo.raw().execSQL("DELETE FROM notes WHERE type='wayaku'")
+        repo.installedSeedPacks = repo.installedSeedPacks - "wayaku"
 
         Seed.populate(repo)
 

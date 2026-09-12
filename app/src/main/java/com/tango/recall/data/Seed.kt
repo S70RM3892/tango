@@ -25,6 +25,11 @@ object Seed {
         "eisakubun" to ::seedEisakubun,
         "chem_calc" to ::seedChemCalc,
         "wayaku" to ::seedWayaku,
+        "organic" to ::seedOrganic,
+        "inorganic_extra" to ::seedInorganic,
+        "vocabulary_extra" to ::seedMoreVocabulary,
+        "eisakubun_extra" to ::seedMoreEisakubun,
+        "chem_calc_extra" to ::seedMoreChemCalc,
     )
 
     /** What the starter content consisted of before it was split into packs. */
@@ -48,7 +53,7 @@ object Seed {
 
     // ---- English ------------------------------------------------------------
 
-    private data class Word(
+    internal data class Word(
         val word: String, val meaning: String, val pos: String, val root: String,
         val example: String, val exampleJa: String, val collocation: String = "",
     )
@@ -165,7 +170,7 @@ object Seed {
     }
 
     /** Add every word of every root group, linking each group into a clique. */
-    private fun addWords(s: Seeder, deckId: Long, groups: List<Pair<String, List<Word>>>) {
+    internal fun addWords(s: Seeder, deckId: Long, groups: List<Pair<String, List<Word>>>) {
         for ((root, words) in groups) {
             val ids = words.map { w ->
                 s.note(
@@ -304,7 +309,10 @@ object Seed {
 
         val contact = reaction(
             "接触法（硫酸の工業的製法）",
-            "S or FeS2 → SO2\n2SO2 + O2 ⇄ 2SO3\nSO3 + H2O → H2SO4",
+            "S + O2 → SO2（硫黄を燃やす場合）\n" +
+                "4FeS2 + 11O2 → 2Fe2O3 + 8SO2（黄鉄鉱を焙焼する場合）\n" +
+                "2SO2 + O2 ⇄ 2SO3\n" +
+                "SO3 + H2O → H2SO4",
             "第2段階は酸化バナジウム(V) V2O5 を触媒とし約400〜500℃",
             "SO3 は水と激しく反応するので、直接水に通さず濃硫酸に吸収させて発煙硫酸とし、希硫酸で薄める。",
         )
