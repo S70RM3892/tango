@@ -30,6 +30,8 @@ object Seed {
         "vocabulary_extra" to ::seedMoreVocabulary,
         "eisakubun_extra" to ::seedMoreEisakubun,
         "chem_calc_extra" to ::seedMoreChemCalc,
+        "math" to ::seedMath,
+        "physics_atomic" to ::seedPhysics,
     )
 
     /** What the starter content consisted of before it was split into packs. */

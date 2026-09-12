@@ -53,6 +53,7 @@ object Routes {
     const val BROWSE = "browse/{deckId}"
     const val NOTE = "note/{noteId}/{deckId}"
     const val EXAM_REVIEW = "review/exam"
+    const val NOTE_REVIEW = "review/note/{noteId}"
     const val GRAPH = "graph/{deckId}"
     const val UNIVERSITIES = "universities"
     const val STATS = "stats"
@@ -63,6 +64,7 @@ object Routes {
     fun browse(deckId: Long?) = "browse/${deckId ?: -1L}"
     fun note(noteId: Long, deckId: Long) = "note/$noteId/$deckId"
     fun graph(deckId: Long?) = "graph/${deckId ?: -1L}"
+    fun reviewNote(noteId: Long) = "review/note/$noteId"
 }
 
 @Composable
@@ -118,6 +120,12 @@ fun TangoApp() {
                 GraphScreen(vm, nav, raw.takeIf { it >= 0 })
             }
             composable(Routes.EXAM_REVIEW) { ReviewScreen(vm, nav, deckId = null, exam = true) }
+            composable(
+                Routes.NOTE_REVIEW,
+                arguments = listOf(navArgument("noteId") { type = NavType.LongType }),
+            ) { entry ->
+                ReviewScreen(vm, nav, deckId = null, noteId = entry.arguments?.getLong("noteId"))
+            }
             composable(Routes.UNIVERSITIES) { UniversityScreen(vm, nav) }
             composable(Routes.STATS) { StatsScreen(vm, nav) }
             composable(Routes.SETTINGS) { SettingsScreen(vm, nav) }

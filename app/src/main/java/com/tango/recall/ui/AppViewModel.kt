@@ -28,6 +28,7 @@ import com.tango.recall.data.RenderedCard
 import com.tango.recall.data.Repository
 import com.tango.recall.data.Seed
 import com.tango.recall.data.Stats
+import com.tango.recall.data.Subject
 import com.tango.recall.data.TangoDb
 import com.tango.recall.data.Universities
 import com.tango.recall.data.gradeNumeric
@@ -203,14 +204,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- review -------------------------------------------------------------
 
-    fun startReview(deckId: Long?, exam: Boolean = false) = viewModelScope.launch {
+    fun startReview(deckId: Long?, exam: Boolean = false, noteId: Long? = null) = viewModelScope.launch {
         busy = true
         val name = when {
+            noteId != null -> "今日の1問"
             exam -> "試験日から逆算"
             deckId != null -> io { repo.deck(deckId) }?.name ?: "デッキ"
             else -> "すべてのデッキ"
         }
-        val queue = if (exam) io { repo.buildExamQueue() } else io { repo.buildQueue(deckId) }
+        val queue = when {
+            noteId != null -> io { repo.queueForNote(noteId) }
+            exam -> io { repo.buildExamQueue() }
+            else -> io { repo.buildQueue(deckId) }
+        }
         // Worked out once for the whole session rather than per card.
         val stumbles = io { repo.missCounts() }
         forgetUndo()
@@ -469,7 +475,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun weakest(): List<Pair<Note, Double>> = io { repo.weakest() }
 
-    suspend fun graph(deckId: Long?): GraphData = io { repo.graph(deckId) }
+    suspend fun graph(deckId: Long?, subject: Subject? = null): GraphData =
+        io { repo.graph(deckId, subject) }
+
+    /** Which subjects the collection actually holds, in the order they are defined. */
+    suspend fun subjects(): List<Subject> = io {
+        val present = repo.listDecks().map { it.noteType.subject }.toSet()
+        Subject.entries.filter { it in present }
+    }
+
+    // ---- 今日の1問 -----------------------------------------------------------
+
+    var problemOfTheDay by mutableStateOf<Note?>(null); private set
+
+    fun loadProblemOfTheDay() = viewModelScope.launch {
+        problemOfTheDay = io { repo.problemOfTheDay() }
+    }
 
     // ---- exam countdown -----------------------------------------------------
 

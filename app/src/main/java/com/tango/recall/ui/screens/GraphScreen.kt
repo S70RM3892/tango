@@ -76,6 +76,7 @@ import androidx.navigation.NavController
 import com.tango.recall.Routes
 import com.tango.recall.data.GraphData
 import com.tango.recall.data.NoteType
+import com.tango.recall.data.Subject
 import com.tango.recall.ui.AppViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -104,6 +105,8 @@ private enum class MapMode { ALL, ISOLATED, FOCUS }
 @Composable
 fun GraphScreen(vm: AppViewModel, nav: NavController, initialDeckId: Long?) {
     var deckId by remember { mutableStateOf(initialDeckId) }
+    var subject by remember { mutableStateOf<Subject?>(null) }
+    var subjects by remember { mutableStateOf<List<Subject>>(emptyList()) }
     var mode by remember { mutableStateOf(MapMode.ALL) }
     var focusId by remember { mutableStateOf<Long?>(null) }
 
@@ -117,9 +120,11 @@ fun GraphScreen(vm: AppViewModel, nav: NavController, initialDeckId: Long?) {
     var query by remember { mutableStateOf("") }
     var centreOn by remember { mutableStateOf<Long?>(null) }
 
-    LaunchedEffect(deckId) {
+    LaunchedEffect(Unit) { subjects = vm.subjects() }
+
+    LaunchedEffect(deckId, subject) {
         loading = true
-        source = vm.graph(deckId)
+        source = vm.graph(deckId, subject)
     }
 
     // Quantised so a one-pixel resize does not trigger a fresh layout.
@@ -183,6 +188,36 @@ fun GraphScreen(vm: AppViewModel, nav: NavController, initialDeckId: Long?) {
                 )
             }
 
+            // Subject first, decks second: nobody studies "化学・物質", they study
+            // chemistry, and one row per level keeps either row short enough to read.
+            if (subjects.size > 1) {
+                Row(
+                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    FilterChip(
+                        selected = subject == null,
+                        onClick = { subject = null; deckId = null; mode = MapMode.ALL; focusId = null },
+                        label = { Text("全科目") },
+                    )
+                    subjects.forEach { candidate ->
+                        FilterChip(
+                            selected = subject == candidate,
+                            onClick = {
+                                subject = candidate
+                                deckId = null
+                                mode = MapMode.ALL
+                                focusId = null
+                            },
+                            label = { Text(candidate.label) },
+                        )
+                    }
+                }
+            }
+
+            val decksShown = vm.decks.filter { subject == null || it.noteType.subject == subject }
+
             Row(
                 Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
                     .padding(horizontal = 12.dp, vertical = 4.dp),
@@ -191,9 +226,9 @@ fun GraphScreen(vm: AppViewModel, nav: NavController, initialDeckId: Long?) {
                 FilterChip(
                     selected = mode == MapMode.ALL && deckId == null,
                     onClick = { mode = MapMode.ALL; focusId = null; deckId = null },
-                    label = { Text("すべて") },
+                    label = { Text(if (subject == null) "すべて" else "${subject!!.label}すべて") },
                 )
-                vm.decks.forEach { deck ->
+                decksShown.forEach { deck ->
                     FilterChip(
                         selected = mode == MapMode.ALL && deckId == deck.id,
                         onClick = { mode = MapMode.ALL; focusId = null; deckId = deck.id },
@@ -974,5 +1009,7 @@ private fun colorFor(typeId: String): Color = when (typeId) {
     NoteType.EISAKUBUN.id -> Color(0xFFC084FC)
     NoteType.WAYAKU.id -> Color(0xFFF472B6)
     NoteType.CHEM_CALC.id -> Color(0xFF4ADE80)
+    NoteType.MATH.id -> Color(0xFFF97316)
+    NoteType.PHYSICS.id -> Color(0xFF38BDF8)
     else -> Color(0xFF94A3B8)
 }

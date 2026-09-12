@@ -252,11 +252,21 @@ class Repository(private val helper: TangoDb) {
 
     // ---- notes --------------------------------------------------------------
 
-    fun listNotes(deckId: Long?, query: String = "", limit: Int = 500): List<Note> {
+    fun listNotes(
+        deckId: Long?,
+        query: String = "",
+        limit: Int = 500,
+        subject: Subject? = null,
+    ): List<Note> {
         val args = mutableListOf<String>()
         val where = buildString {
             append("1=1")
             if (deckId != null) { append(" AND deckId=?"); args += deckId.toString() }
+            if (subject != null) {
+                val types = NoteType.entries.filter { it.subject == subject }
+                append(types.joinToString(",", " AND type IN (", ")") { "?" })
+                args += types.map { it.id }
+            }
             if (query.isNotBlank()) {
                 // The note's own search text, not the raw JSON: that matched field
                 // *names* ("memo" found every note) and missed anything org.json
@@ -421,6 +431,29 @@ class Repository(private val helper: TangoDb) {
             arrayOf(if (suspended) 1 else 0, cardId),
         )
     }
+
+    /**
+     * One problem to work through today, the same one all day.
+     *
+     * Chosen by the date rather than at random so that it does not change under the
+     * learner between one glance and the next, and so that "今日の1問" means the same
+     * thing on two devices. It rotates through everything problem-shaped — a
+     * calculation, a translation, a plan for a maths question — because that is what
+     * the second-stage paper actually asks for.
+     */
+    fun problemOfTheDay(now: Long = System.currentTimeMillis()): Note? {
+        val types = PROBLEM_TYPES.joinToString(",") { "'" + it.id + "'" }
+        val ids = db.rawQuery("SELECT id FROM notes WHERE type IN ($types) ORDER BY id", null)
+            .mapAll { it.getLong(0) }
+        if (ids.isEmpty()) return null
+        val day = Math.floorDiv(dayStart(now), 86_400_000L)
+        val index = Math.floorMod(day, ids.size.toLong()).toInt()
+        return note(ids[index])
+    }
+
+    /** Just this note's cards, for studying one item on its own. */
+    fun queueForNote(noteId: Long): List<Long> =
+        cardsOfNote(noteId).filterNot { it.suspended }.map { it.id }
 
     // ---- study queue --------------------------------------------------------
 
@@ -725,8 +758,13 @@ class Repository(private val helper: TangoDb) {
      * Node strength is the mean predicted recall of the note's cards, so the map
      * doubles as a picture of what is currently solid and what is fading.
      */
-    fun graph(deckId: Long?, now: Long = System.currentTimeMillis(), limit: Int = 500): GraphData {
-        val notes = listNotes(deckId, "", limit)
+    fun graph(
+        deckId: Long?,
+        subject: Subject? = null,
+        now: Long = System.currentTimeMillis(),
+        limit: Int = 500,
+    ): GraphData {
+        val notes = listNotes(deckId, "", limit, subject)
         if (notes.isEmpty()) return GraphData(emptyList(), emptyList())
         val ids = notes.map { it.id }.toSet()
         val sched = scheduler()
@@ -958,6 +996,11 @@ class Repository(private val helper: TangoDb) {
         const val KEY_REMINDER = "reminder_enabled"
         const val KEY_REMINDER_HOUR = "reminder_hour"
         const val KEY_REMINDER_MINUTE = "reminder_minute"
+
+        /** The note types that pose a problem to work through, not a fact to recall. */
+        val PROBLEM_TYPES = listOf(
+            NoteType.MATH, NoteType.CHEM_CALC, NoteType.EISAKUBUN, NoteType.WAYAKU,
+        )
 
         /** How close the target is pushed as the exam arrives. */
         const val EXAM_PEAK_RETENTION = 0.97

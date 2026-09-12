@@ -68,8 +68,14 @@ import com.tango.recall.ui.ConfusionHit
 import com.tango.recall.ui.ReviewSession
 
 @Composable
-fun ReviewScreen(vm: AppViewModel, nav: NavController, deckId: Long?, exam: Boolean = false) {
-    LaunchedEffect(deckId, exam) { vm.startReview(deckId, exam) }
+fun ReviewScreen(
+    vm: AppViewModel,
+    nav: NavController,
+    deckId: Long?,
+    exam: Boolean = false,
+    noteId: Long? = null,
+) {
+    LaunchedEffect(deckId, exam, noteId) { vm.startReview(deckId, exam, noteId) }
     val session = vm.session
     var peek by remember { mutableStateOf<Note?>(null) }
 

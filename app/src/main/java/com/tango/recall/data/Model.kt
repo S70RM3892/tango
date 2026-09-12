@@ -60,15 +60,36 @@ data class CardTemplate(
     val defaultEnabled: Boolean = true,
 )
 
+/**
+ * The subject a note belongs to.
+ *
+ * Note types are fine-grained on purpose — a chemical substance and a calculation are
+ * asked in completely different ways — but nobody studies "化学・物質", they study
+ * chemistry. The subject is what the connection map and the deck lists group by.
+ */
+enum class Subject(val id: String, val label: String) {
+    ENGLISH("english", "英語"),
+    CHEMISTRY("chemistry", "化学"),
+    MATH("math", "数学"),
+    PHYSICS("physics", "物理"),
+    OTHER("other", "その他");
+
+    companion object {
+        fun fromId(id: String): Subject = entries.firstOrNull { it.id == id } ?: OTHER
+    }
+}
+
 enum class NoteType(
     val id: String,
     val label: String,
+    val subject: Subject,
     val fields: List<FieldDef>,
     val templates: List<CardTemplate>,
 ) {
     ENGLISH(
         id = "english",
         label = "英単語",
+        subject = Subject.ENGLISH,
         fields = listOf(
             FieldDef("word", "語", "abandon"),
             FieldDef("meaning", "意味", "〜を見捨てる／放棄する"),
@@ -100,6 +121,7 @@ enum class NoteType(
     CHEM_SUBSTANCE(
         id = "chem_substance",
         label = "化学・物質",
+        subject = Subject.CHEMISTRY,
         fields = listOf(
             FieldDef("name", "名称", "硫酸銅(II)五水和物"),
             FieldDef("formula", "化学式", "CuSO4·5H2O"),
@@ -121,6 +143,7 @@ enum class NoteType(
     CHEM_REACTION(
         id = "chem_reaction",
         label = "化学・反応",
+        subject = Subject.CHEMISTRY,
         fields = listOf(
             FieldDef("title", "反応名", "接触法（硫酸の製造）"),
             FieldDef("equation", "反応式", "2SO2 + O2 → 2SO3", multiline = true),
@@ -149,6 +172,7 @@ enum class NoteType(
     EISAKUBUN(
         id = "eisakubun",
         label = "和文英訳",
+        subject = Subject.ENGLISH,
         fields = listOf(
             FieldDef("ja", "日本語文", "彼の言うことは、どうも腑に落ちない。", multiline = true),
             FieldDef("en", "模範英訳", "Something about what he says doesn't quite convince me.", multiline = true),
@@ -184,6 +208,7 @@ enum class NoteType(
     WAYAKU(
         id = "wayaku",
         label = "英文和訳",
+        subject = Subject.ENGLISH,
         fields = listOf(
             FieldDef(
                 "en", "英文（下線部）",
@@ -215,6 +240,7 @@ enum class NoteType(
     CHEM_CALC(
         id = "chem_calc",
         label = "化学・計算",
+        subject = Subject.CHEMISTRY,
         fields = listOf(
             FieldDef("question", "問題", "0.10 mol/L の酢酸水溶液の pH。Ka = 2.7×10^-5", multiline = true),
             FieldDef("answer", "答え（数値）", "2.8"),
@@ -236,9 +262,101 @@ enum class NoteType(
         ),
     ),
 
+    /**
+     * 数学.
+     *
+     * A maths problem is not memorised, but the move that opens it is: "classify by
+     * remainder", "take the difference of the recurrence", "fix one variable and read
+     * the rest as a function of it". So the card asks for the plan, not the answer,
+     * and grading is a checklist of the steps that had to appear — the same
+     * self-marking as translation, for the same reason.
+     */
+    MATH(
+        id = "math",
+        label = "数学",
+        subject = Subject.MATH,
+        fields = listOf(
+            FieldDef(
+                "question", "問題",
+                "n を整数とする。n² + n + 1 が 3 の倍数になるのは、n を 3 で割った余りがいくつのときか。",
+                multiline = true,
+            ),
+            FieldDef("approach", "方針（ひとことで）", "3 で割った余りで場合分けする", multiline = true),
+            FieldDef(
+                "steps", "押さえる手順（1行に1つ）",
+                "n = 3k, 3k±1 に分ける\n各場合で n² + n + 1 を 3 で割った余りを計算する",
+                multiline = true,
+            ),
+            FieldDef("tools", "使う道具・定理", "剰余による場合分け、合同式"),
+            FieldDef("traps", "落とし穴", "「示せ」なので、すべての場合を尽くしたことを明記する", multiline = true),
+            FieldDef("source", "出典", "自作 / 京大 2020 第2問 など"),
+            FieldDef("memo", "メモ", "", multiline = true),
+        ),
+        templates = listOf(
+            CardTemplate(
+                "math_plan", "問題 → 方針を書く", listOf("question"), listOf("approach", "traps"),
+                AnswerMode.SELF_CHECK,
+                requires = listOf("question", "approach"), checklistField = "steps",
+            ),
+            CardTemplate(
+                "math_tools", "問題 → 使う道具", listOf("question"), listOf("tools", "approach"),
+                AnswerMode.REVEAL, requires = listOf("question", "tools"), defaultEnabled = false,
+            ),
+            CardTemplate(
+                "math_trap", "方針 → 落とし穴", listOf("approach"), listOf("traps"),
+                AnswerMode.REVEAL, requires = listOf("approach", "traps"), defaultEnabled = false,
+            ),
+        ),
+    ),
+
+    /**
+     * 物理（原子）.
+     *
+     * Most of physics is derived rather than remembered, which is why this app stays
+     * out of it. Atomic physics is the exception: the constants, the conditions each
+     * relation holds under, and which experiment established what are simply things
+     * you either know or do not.
+     */
+    PHYSICS(
+        id = "physics",
+        label = "物理・原子",
+        subject = Subject.PHYSICS,
+        fields = listOf(
+            FieldDef("title", "項目・法則名", "光電効果（アインシュタインの式）"),
+            FieldDef("formula", "式", "hν = W + K"),
+            FieldDef(
+                "meaning", "記号の意味",
+                "h: プランク定数、ν: 光の振動数、W: 仕事関数、K: 光電子の最大運動エネルギー",
+                multiline = true,
+            ),
+            FieldDef(
+                "condition", "成り立つ条件・使いどころ",
+                "限界振動数より大きい振動数のとき。光の強さではなく振動数で決まる",
+                multiline = true,
+            ),
+            FieldDef("point", "押さえる点", "", multiline = true),
+            FieldDef("memo", "メモ", "", multiline = true),
+        ),
+        templates = listOf(
+            CardTemplate(
+                "phys_formula", "項目 → 式", listOf("title"), listOf("formula", "meaning"),
+                AnswerMode.REVEAL, requires = listOf("title", "formula"),
+            ),
+            CardTemplate(
+                "phys_name", "式 → 項目", listOf("formula"), listOf("title", "meaning"),
+                AnswerMode.REVEAL, requires = listOf("title", "formula"),
+            ),
+            CardTemplate(
+                "phys_condition", "項目 → 使いどころ", listOf("title"), listOf("condition", "point"),
+                AnswerMode.REVEAL, requires = listOf("title", "condition"),
+            ),
+        ),
+    ),
+
     BASIC(
         id = "basic",
         label = "自由形式",
+        subject = Subject.OTHER,
         fields = listOf(
             FieldDef("front", "表", "", multiline = true),
             FieldDef("back", "裏", "", multiline = true),
@@ -296,6 +414,8 @@ enum class LinkType(
             NoteType.EISAKUBUN -> listOf(SAME_GROUP, CONTRAST, CONFUSABLE, RELATED)
             NoteType.WAYAKU -> listOf(SAME_GROUP, CONTRAST, CONFUSABLE, RELATED)
             NoteType.CHEM_CALC -> listOf(SAME_GROUP, CONTRAST, RELATED)
+            NoteType.MATH -> listOf(SAME_GROUP, CONTRAST, CONFUSABLE, HYPERNYM, RELATED)
+            NoteType.PHYSICS -> listOf(SAME_GROUP, CONTRAST, CONFUSABLE, PRODUCES, RELATED)
             NoteType.BASIC -> entries
         }
     }
@@ -335,6 +455,8 @@ data class Note(
         NoteType.EISAKUBUN -> this["ja"]
         NoteType.WAYAKU -> this["en"]
         NoteType.CHEM_CALC -> this["question"]
+        NoteType.MATH -> this["question"]
+        NoteType.PHYSICS -> this["title"]
         NoteType.BASIC -> this["front"]
     }.ifBlank { type.fields.firstNotNullOfOrNull { fields[it.id]?.ifBlank { null } } ?: "(空)" }
 
@@ -345,6 +467,8 @@ data class Note(
         NoteType.EISAKUBUN -> this["en"]
         NoteType.WAYAKU -> this["ja"]
         NoteType.CHEM_CALC -> listOf(this["answer"], this["unit"]).filter { it.isNotBlank() }.joinToString(" ")
+        NoteType.MATH -> this["approach"]
+        NoteType.PHYSICS -> this["formula"]
         NoteType.BASIC -> this["back"]
     }
 }

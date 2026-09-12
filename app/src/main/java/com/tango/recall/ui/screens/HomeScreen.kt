@@ -33,12 +33,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.tango.recall.Routes
 import com.tango.recall.data.Deck
 import com.tango.recall.data.DeckCounts
 import com.tango.recall.data.ExamOutlook
+import com.tango.recall.data.Note
 import com.tango.recall.ui.AppViewModel
 
 @Composable
@@ -49,6 +51,7 @@ fun HomeScreen(vm: AppViewModel, nav: NavController) {
     }
 
     LaunchedEffect(Unit) { vm.loadExamOutlook() }
+    LaunchedEffect(Unit) { vm.loadProblemOfTheDay() }
     val totalStudyable = vm.counts.values.sumOf { it.studyable }
 
     Scaffold(
@@ -107,6 +110,16 @@ fun HomeScreen(vm: AppViewModel, nav: NavController) {
                             modifier = Modifier.weight(1f),
                         ) { Text("国公立大学") }
                     }
+                }
+            }
+
+            vm.problemOfTheDay?.let { problem ->
+                item {
+                    ProblemOfTheDayCard(
+                        note = problem,
+                        onSolve = { nav.navigate(Routes.reviewNote(problem.id)) },
+                        onOpen = { nav.navigate(Routes.note(problem.id, problem.deckId)) },
+                    )
                 }
             }
 
@@ -242,4 +255,46 @@ private fun TextActions(label: String, onClick: () -> Unit) {
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.primary,
     )
+}
+
+/**
+ * One problem a day, worked with a pen.
+ *
+ * Recall practice and actually writing out a solution are different skills, and the
+ * second is what the second-stage paper is made of. It is the same problem all day —
+ * picked by the date, not at random — so it can be turned over between other things
+ * rather than re-rolled until an easy one comes up.
+ */
+@Composable
+private fun ProblemOfTheDayCard(note: Note, onSolve: () -> Unit, onOpen: () -> Unit) {
+    SectionCard {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("今日の1問", style = MaterialTheme.typography.titleMedium)
+            Pill(note.type.subject.label)
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            note.title(),
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = 6,
+            overflow = TextOverflow.Ellipsis,
+        )
+        note["source"].takeIf { it.isNotBlank() }?.let {
+            Spacer(Modifier.height(6.dp))
+            Text(
+                "出典: $it",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.height(12.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = onSolve, modifier = Modifier.weight(1f)) { Text("解く") }
+            OutlinedButton(onClick = onOpen, modifier = Modifier.weight(1f)) { Text("ノートを見る") }
+        }
+    }
 }
