@@ -1,23 +1,48 @@
 package com.tango.recall.data
 
 /**
- * Starter content.
+ * Bundled content, in packs.
  *
  * Everything here is ordinary editable data — the point is to show what a
  * well-linked note looks like (shared etymological roots for English, reaction
  * chains for chemistry) so a new deck has something to imitate. Delete freely.
+ *
+ * It is split into packs so that a later version can add material to a phone that
+ * has been in use for months: a pack the learner has not got yet is installed on the
+ * next launch, and one already installed is never touched again.
  */
 object Seed {
 
+    /**
+     * Every pack, in installation order.
+     *
+     * The ids are permanent. Renaming one would make the app think the learner has
+     * never seen it and install a second copy.
+     */
+    private val PACKS: List<Pair<String, (Seeder) -> Unit>> = listOf(
+        "english" to ::seedEnglish,
+        "chemistry" to ::seedChemistry,
+        "eisakubun" to ::seedEisakubun,
+        "chem_calc" to ::seedChemCalc,
+    )
+
+    /** What the starter content consisted of before it was split into packs. */
+    private val ORIGINAL_PACKS = setOf("english", "chemistry", "eisakubun", "chem_calc")
+
     fun populate(repo: Repository) {
-        if (repo.setting(Repository.KEY_SEEDED, "") == "1") return
-        repo.transaction {
-            seedEnglish(repo)
-            seedChemistry(repo)
-            seedEisakubun(repo)
-            seedChemCalc(repo)
-            repo.putSetting(Repository.KEY_SEEDED, "1")
+        var installed = repo.installedSeedPacks
+        // A phone set up before packs existed already holds the original content.
+        if (installed.isEmpty() && repo.setting(Repository.KEY_SEEDED, "") == "1") {
+            installed = ORIGINAL_PACKS
+            repo.installedSeedPacks = installed
         }
+        for ((id, install) in PACKS) {
+            if (id in installed) continue
+            repo.transaction { install(Seeder(repo)) }
+            installed = installed + id
+            repo.installedSeedPacks = installed
+        }
+        repo.putSetting(Repository.KEY_SEEDED, "1")
     }
 
     // ---- English ------------------------------------------------------------
@@ -114,50 +139,23 @@ object Seed {
         ),
     )
 
-    private fun seedEnglish(repo: Repository) {
-        val deckId = repo.saveDeck(
-            Deck(
-                name = "英単語（語源でつなぐ）",
-                noteTypeId = NoteType.ENGLISH.id,
-                enabledTemplates = setOf("en_ja", "ja_en", "cloze"),
-                newPerDay = 15,
-                relationQuiz = true,
-            )
+    private fun seedEnglish(s: Seeder) {
+        val deckId = s.deck(
+            name = ENGLISH_DECK,
+            type = NoteType.ENGLISH,
+            templates = setOf("en_ja", "ja_en", "cloze"),
+            newPerDay = 15,
+            relationQuiz = true,
         )
 
-        for ((root, words) in ROOT_GROUPS) {
-            val ids = words.map { w ->
-                repo.saveNote(
-                    Note(
-                        deckId = deckId,
-                        typeId = NoteType.ENGLISH.id,
-                        fields = mapOf(
-                            "word" to w.word,
-                            "meaning" to w.meaning,
-                            "pos" to w.pos,
-                            "root" to w.root,
-                            "example" to w.example,
-                            "exampleJa" to w.exampleJa,
-                            "collocation" to w.collocation,
-                            "memo" to "",
-                        ),
-                        tags = listOf("語源", root.substringBefore("（").trim().replace(" / ", "-")),
-                    )
-                )
-            }
-            // Every word in a root group is linked to every other one, so answering any
-            // of them surfaces the rest.
-            for (i in ids.indices) for (j in i + 1 until ids.size) {
-                repo.addLink(ids[i], ids[j], LinkType.SAME_ROOT, root)
-            }
-        }
+        addWords(s, deckId, ROOT_GROUPS)
 
         // A couple of cross-group relations that are worth noticing.
-        val byWord = repo.listNotes(deckId, "", Int.MAX_VALUE).associateBy { it.title() }
+        val byWord = s.repo.listNotes(deckId, "", Int.MAX_VALUE).associateBy { it.title() }
         fun link(a: String, b: String, t: LinkType, memo: String = "") {
             val x = byWord[a]?.id ?: return
             val y = byWord[b]?.id ?: return
-            repo.addLink(x, y, t, memo)
+            s.link(x, y, t, memo)
         }
         link("induce", "deduce", LinkType.CONTRAST, "induce=帰納的に引き出す / deduce=演繹して導く")
         link("adverse", "conducive", LinkType.ANTONYM, "不利に働く ↔ 助けとなる")
@@ -165,54 +163,71 @@ object Seed {
         link("retain", "sustain", LinkType.SYNONYM, "どちらも「保ち続ける」")
     }
 
+    /** Add every word of every root group, linking each group into a clique. */
+    private fun addWords(s: Seeder, deckId: Long, groups: List<Pair<String, List<Word>>>) {
+        for ((root, words) in groups) {
+            val ids = words.map { w ->
+                s.note(
+                    deckId, NoteType.ENGLISH,
+                    mapOf(
+                        "word" to w.word,
+                        "meaning" to w.meaning,
+                        "pos" to w.pos,
+                        "root" to w.root,
+                        "example" to w.example,
+                        "exampleJa" to w.exampleJa,
+                        "collocation" to w.collocation,
+                        "memo" to "",
+                    ),
+                    listOf("語源", root.substringBefore("（").trim().replace(" / ", "-")),
+                )
+            }
+            // Every word in a root group is linked to every other one, so answering any
+            // of them surfaces the rest.
+            for (i in ids.indices) for (j in i + 1 until ids.size) {
+                s.link(ids[i], ids[j], LinkType.SAME_ROOT, root)
+            }
+        }
+    }
+
     // ---- Chemistry ----------------------------------------------------------
 
-    private fun seedChemistry(repo: Repository) {
-        val substanceDeck = repo.saveDeck(
-            Deck(
-                name = "化学・無機物質",
-                noteTypeId = NoteType.CHEM_SUBSTANCE.id,
-                enabledTemplates = setOf("name_formula", "formula_name", "name_props"),
-                newPerDay = 10,
-                relationQuiz = true,
-            )
+    private fun seedChemistry(s: Seeder) {
+        val substanceDeck = s.deck(
+            name = INORGANIC_DECK,
+            type = NoteType.CHEM_SUBSTANCE,
+            templates = setOf("name_formula", "formula_name", "name_props"),
+            newPerDay = 10,
+            relationQuiz = true,
         )
-        val reactionDeck = repo.saveDeck(
-            Deck(
-                name = "化学・工業的製法と反応",
-                noteTypeId = NoteType.CHEM_REACTION.id,
-                enabledTemplates = setOf("title_eq", "eq_title", "title_cond"),
-                newPerDay = 6,
-                relationQuiz = true,
-            )
+        val reactionDeck = s.deck(
+            name = REACTION_DECK,
+            type = NoteType.CHEM_REACTION,
+            templates = setOf("title_eq", "eq_title", "title_cond"),
+            newPerDay = 6,
+            relationQuiz = true,
         )
 
         fun substance(
             name: String, formula: String, category: String, props: String, uses: String,
-        ): Long = repo.saveNote(
-            Note(
-                deckId = substanceDeck,
-                typeId = NoteType.CHEM_SUBSTANCE.id,
-                fields = mapOf(
-                    "name" to name, "formula" to formula, "category" to category,
-                    "props" to props, "uses" to uses, "memo" to "",
-                ),
-                tags = listOf("無機", category),
-            )
+        ): Long = s.note(
+            substanceDeck, NoteType.CHEM_SUBSTANCE,
+            mapOf(
+                "name" to name, "formula" to formula, "category" to category,
+                "props" to props, "uses" to uses, "memo" to "",
+            ),
+            listOf("無機", category),
         )
 
         fun reaction(
             title: String, equation: String, condition: String, point: String,
-        ): Long = repo.saveNote(
-            Note(
-                deckId = reactionDeck,
-                typeId = NoteType.CHEM_REACTION.id,
-                fields = mapOf(
-                    "title" to title, "equation" to equation,
-                    "condition" to condition, "point" to point, "memo" to "",
-                ),
-                tags = listOf("無機", "製法"),
-            )
+        ): Long = s.note(
+            reactionDeck, NoteType.CHEM_REACTION,
+            mapOf(
+                "title" to title, "equation" to equation,
+                "condition" to condition, "point" to point, "memo" to "",
+            ),
+            listOf("無機", "製法"),
         )
 
         val h2so4 = substance(
@@ -335,7 +350,7 @@ object Seed {
             "赤褐色の NO2 が発生。希硝酸との違いは「濃いほど窒素の酸化数が高いまま残る」と整理する。",
         )
 
-        fun link(a: Long, b: Long, t: LinkType, memo: String) = repo.addLink(a, b, t, memo)
+        fun link(a: Long, b: Long, t: LinkType, memo: String) = s.link(a, b, t, memo)
 
         link(contact, so2, LinkType.PRODUCES, "接触法 第1段階の生成物")
         link(contact, so3, LinkType.PRODUCES, "接触法 第2段階の生成物")
@@ -370,25 +385,20 @@ object Seed {
 
     // ---- 和文英訳 -------------------------------------------------------------
 
-    private fun seedEisakubun(repo: Repository) {
-        val deckId = repo.saveDeck(
-            Deck(
-                name = "和文英訳（直訳できない日本語）",
-                noteTypeId = NoteType.EISAKUBUN.id,
-                enabledTemplates = setOf("ja_en_write"),
-                newPerDay = 3,
-            )
+    private fun seedEisakubun(s: Seeder) {
+        val deckId = s.deck(
+            name = EISAKUBUN_DECK,
+            type = NoteType.EISAKUBUN,
+            templates = setOf("ja_en_write"),
+            newPerDay = 3,
         )
 
-        fun sentence(ja: String, en: String, structures: String, traps: String) = repo.saveNote(
-            Note(
-                deckId = deckId,
-                typeId = NoteType.EISAKUBUN.id,
-                fields = mapOf(
-                    "ja" to ja, "en" to en, "structures" to structures, "traps" to traps, "memo" to "",
-                ),
-                tags = listOf("和文英訳"),
-            )
+        fun sentence(ja: String, en: String, structures: String, traps: String) = s.note(
+            deckId, NoteType.EISAKUBUN,
+            mapOf(
+                "ja" to ja, "en" to en, "structures" to structures, "traps" to traps, "memo" to "",
+            ),
+            listOf("和文英訳"),
         )
 
         sentence(
@@ -430,11 +440,11 @@ object Seed {
             "「ばかりだ」を only で処理しない。二重否定の構文に落とすと自然になる。",
         )
 
-        val byJa = repo.listNotes(deckId, "", Int.MAX_VALUE).associateBy { it.title() }
+        val byJa = s.repo.listNotes(deckId, "", Int.MAX_VALUE).associateBy { it.title() }
         fun link(a: String, b: String, t: LinkType, memo: String) {
             val x = byJa[a]?.id ?: return
             val y = byJa[b]?.id ?: return
-            repo.addLink(x, y, t, memo)
+            s.link(x, y, t, memo)
         }
         link(
             "知らないということを知っているだけ、彼はましだ。",
@@ -450,28 +460,23 @@ object Seed {
 
     // ---- 化学の計算 -----------------------------------------------------------
 
-    private fun seedChemCalc(repo: Repository) {
-        val deckId = repo.saveDeck(
-            Deck(
-                name = "化学・計算",
-                noteTypeId = NoteType.CHEM_CALC.id,
-                enabledTemplates = setOf("calc"),
-                newPerDay = 4,
-            )
+    private fun seedChemCalc(s: Seeder) {
+        val deckId = s.deck(
+            name = CALC_DECK,
+            type = NoteType.CHEM_CALC,
+            templates = setOf("calc"),
+            newPerDay = 4,
         )
 
         fun problem(
             question: String, answer: String, unit: String, tolerance: String, solution: String,
-        ) = repo.saveNote(
-            Note(
-                deckId = deckId,
-                typeId = NoteType.CHEM_CALC.id,
-                fields = mapOf(
-                    "question" to question, "answer" to answer, "unit" to unit,
-                    "tolerance" to tolerance, "solution" to solution, "memo" to "",
-                ),
-                tags = listOf("計算"),
-            )
+        ) = s.note(
+            deckId, NoteType.CHEM_CALC,
+            mapOf(
+                "question" to question, "answer" to answer, "unit" to unit,
+                "tolerance" to tolerance, "solution" to solution, "memo" to "",
+            ),
+            listOf("計算"),
         )
 
         val mol = problem(
@@ -510,9 +515,64 @@ object Seed {
             "200 g × 0.20 = 40 g",
         )
 
-        repo.addLink(strongAcid, weakAcid, LinkType.CONTRAST, "強酸は [H+] = c、弱酸は [H+] = √(Ka·c)。ここを取り違えやすい")
-        repo.addLink(mol, ideal, LinkType.RELATED, "標準状態の 22.4 L は気体の状態方程式から出る特別な場合")
-        repo.addLink(molarity, percent, LinkType.CONTRAST, "モル濃度は体積あたり、質量パーセントは質量あたり")
-        repo.addLink(combustion, mol, LinkType.RELATED, "係数比から物質量を出す流れは共通")
+        s.link(strongAcid, weakAcid, LinkType.CONTRAST, "強酸は [H+] = c、弱酸は [H+] = √(Ka·c)。ここを取り違えやすい")
+        s.link(mol, ideal, LinkType.RELATED, "標準状態の 22.4 L は気体の状態方程式から出る特別な場合")
+        s.link(molarity, percent, LinkType.CONTRAST, "モル濃度は体積あたり、質量パーセントは質量あたり")
+        s.link(combustion, mol, LinkType.RELATED, "係数比から物質量を出す流れは共通")
+    }
+
+    // ---- deck names, shared by the packs that add to them --------------------
+
+    internal const val ENGLISH_DECK = "英単語（語源でつなぐ）"
+    internal const val INORGANIC_DECK = "化学・無機物質"
+    internal const val REACTION_DECK = "化学・工業的製法と反応"
+    internal const val EISAKUBUN_DECK = "和文英訳（直訳できない日本語）"
+    internal const val CALC_DECK = "化学・計算"
+}
+
+/**
+ * Installs bundled content without ever overwriting the learner's own.
+ *
+ * A deck or a note that is already there is left exactly as it stands — packs are
+ * installed onto phones that have been in use for months, and new material must
+ * never clobber an edit, a tag or a schedule.
+ */
+class Seeder(val repo: Repository) {
+
+    private val titles = HashMap<Long, MutableMap<String, Long>>()
+
+    fun deck(
+        name: String,
+        type: NoteType,
+        templates: Set<String>,
+        newPerDay: Int,
+        relationQuiz: Boolean = false,
+    ): Long {
+        repo.listDecks().firstOrNull { it.name == name }?.let { return it.id }
+        return repo.saveDeck(
+            Deck(
+                name = name,
+                noteTypeId = type.id,
+                enabledTemplates = templates,
+                newPerDay = newPerDay,
+                relationQuiz = relationQuiz,
+            )
+        )
+    }
+
+    /** Add a note, or return the one already carrying that heading word. */
+    fun note(deckId: Long, type: NoteType, fields: Map<String, String>, tags: List<String>): Long {
+        val known = titles.getOrPut(deckId) {
+            repo.listNotes(deckId, "", Int.MAX_VALUE).associateTo(HashMap()) { it.title() to it.id }
+        }
+        val candidate = Note(deckId = deckId, typeId = type.id, fields = fields, tags = tags)
+        known[candidate.title()]?.let { return it }
+        val id = repo.saveNote(candidate)
+        known[candidate.title()] = id
+        return id
+    }
+
+    fun link(a: Long, b: Long, type: LinkType, memo: String = "") {
+        repo.addLink(a, b, type, memo)
     }
 }

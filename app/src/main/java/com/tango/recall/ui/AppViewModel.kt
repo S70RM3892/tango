@@ -45,6 +45,15 @@ import kotlinx.coroutines.withContext
  */
 data class ConfusionHit(val other: Note, val times: Int, val autoLinked: Boolean)
 
+/**
+ * Everything needed to take back the last grade.
+ *
+ * FSRS has no notion of "that answer was not true", so undo restores the card's
+ * whole scheduling state from the copy taken before the button was pressed, and puts
+ * the session back where it was — same card, same answer on screen.
+ */
+private data class UndoPoint(val card: Card, val session: ReviewSession)
+
 /** Live state of one study session. */
 data class ReviewSession(
     val deckId: Long?,
@@ -79,6 +88,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     var stats by mutableStateOf<Stats?>(null); private set
     var toast by mutableStateOf<String?>(null)
     var busy by mutableStateOf(false); private set
+
+    private var undoPoint: UndoPoint? = null
+
+    /** Whether the last grade can still be taken back. */
+    var canUndo by mutableStateOf(false); private set
 
     init {
         viewModelScope.launch {
@@ -168,14 +182,21 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             else -> "すべてのデッキ"
         }
         val queue = if (exam) io { repo.buildExamQueue() } else io { repo.buildQueue(deckId) }
+        forgetUndo()
         session = ReviewSession(deckId = deckId, deckName = name, queue = queue, examMode = exam)
         advance(0)
         busy = false
     }
 
     fun endReview() {
+        forgetUndo()
         session = null
         refresh()
+    }
+
+    private fun forgetUndo() {
+        undoPoint = null
+        canUndo = false
     }
 
     private suspend fun advance(position: Int) {
@@ -285,6 +306,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val rendered = s.current ?: return@launch
         val now = System.currentTimeMillis()
         val took = (now - s.shownAt).coerceAtMost(10 * 60_000L)
+        // Taken before the answer, because that is the only copy of the card's state
+        // that FSRS cannot reconstruct afterwards.
+        undoPoint = UndoPoint(rendered.card, s)
+        canUndo = true
         val updated = io { repo.answer(rendered.card, rating, now, took) }
 
         // A card that is coming back within the session gets requeued a few places
@@ -304,9 +329,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         advance(s.position + 1)
     }
 
+    /**
+     * Take back the last grade.
+     *
+     * The card goes back to the schedule it had, the review disappears from the log,
+     * and the session returns to that card with the answer still showing — so a
+     * mis-tap costs a second rather than corrupting an interval for months.
+     */
+    fun undoLastAnswer() = viewModelScope.launch {
+        val point = undoPoint ?: return@launch
+        io { repo.undoAnswer(point.card) }
+        forgetUndo()
+        session = point.session
+        toast = "直前の解答を取り消しました"
+    }
+
     /** Skip without grading. */
     fun skip() = viewModelScope.launch {
         val s = session ?: return@launch
+        forgetUndo()
         advance(s.position + 1)
     }
 
@@ -314,6 +355,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val s = session ?: return@launch
         val card = s.current?.card ?: return@launch
         io { repo.setSuspended(card.id, true) }
+        forgetUndo()
         toast = "このカードを保留しました"
         advance(s.position + 1)
     }

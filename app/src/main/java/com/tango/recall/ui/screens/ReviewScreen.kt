@@ -79,6 +79,11 @@ fun ReviewScreen(vm: AppViewModel, nav: NavController, deckId: Long?, exam: Bool
                 title = session?.deckName ?: "学習",
                 onBack = { vm.endReview(); nav.popBackStack() },
             ) {
+                if (vm.canUndo) {
+                    IconButton(onClick = { vm.undoLastAnswer() }) {
+                        Icon(AppIcons.Undo, contentDescription = "直前の解答を取り消す")
+                    }
+                }
                 if (session?.current != null) {
                     IconButton(onClick = {
                         val c = session.current

@@ -149,6 +149,16 @@ class Repository(private val helper: TangoDb) {
         return (base + (EXAM_PEAK_RETENTION - base) * progress).coerceIn(base, EXAM_PEAK_RETENTION)
     }
 
+    /**
+     * Which packs of bundled content are already in.
+     *
+     * Content ships in packs so that a later version can add material to a phone that
+     * was set up long ago: anything not listed here is installed on the next launch.
+     */
+    var installedSeedPacks: Set<String>
+        get() = setting(KEY_SEED_PACKS, "[]").toStringSet()
+        set(value) = putSetting(KEY_SEED_PACKS, value.toJsonArray())
+
     /** Departments the learner has shortlisted, by [Department.key]. */
     var shortlist: Set<String>
         get() = setting(KEY_SHORTLIST, "[]").toStringSet()
@@ -507,6 +517,21 @@ class Repository(private val helper: TangoDb) {
             },
         )
         return updated
+    }
+
+    /**
+     * Put a card back exactly as it was and drop the review that moved it.
+     *
+     * A mis-tapped button otherwise rewrites the card's stability and difficulty for
+     * good — there is no way to tell FSRS "that grade was not true", so the state has
+     * to be restored wholesale from the copy taken before the answer.
+     */
+    fun undoAnswer(previous: Card) {
+        db.update("cards", previous.toValues(), "id=?", arrayOf(previous.id.toString()))
+        db.execSQL(
+            "DELETE FROM reviews WHERE id=(SELECT MAX(id) FROM reviews WHERE cardId=?)",
+            arrayOf(previous.id),
+        )
     }
 
     // ---- links --------------------------------------------------------------
@@ -884,6 +909,7 @@ class Repository(private val helper: TangoDb) {
         const val KEY_SEEDED = "seeded"
         const val KEY_EXAM_DATE = "exam_date"
         const val KEY_SHORTLIST = "shortlist"
+        const val KEY_SEED_PACKS = "seed_packs"
 
         /** How close the target is pushed as the exam arrives. */
         const val EXAM_PEAK_RETENTION = 0.97
