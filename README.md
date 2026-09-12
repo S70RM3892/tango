@@ -28,9 +28,16 @@ Android アプリ（Kotlin / Jetpack Compose）。データはすべて端末内
 ### つながり地図
 ノートを細胞体、関係を軸索として描く全体図です。選んだノートの結合には信号が流れ、
 **明るさはそのノートの「思い出しやすさ」の予測値**なので、暗くなっている一帯がそのまま
-忘れかけている範囲になります。未学習のノートは輪郭だけで表示されます。
+忘れかけている範囲になります。未学習のノートは中が薄い輪郭で表示されます。
 配置は固定の乱数種から計算するので毎回同じ場所に並び、場所で覚えられます。
-「孤立しているノート」で絞り込めば、関係づけの抜けを拾えます。
+
+- 2本指で拡大・縮小（指の間の点が固定されます）、1本指で移動、右上の ＋ / － / 全体 ボタンでも操作可
+- ノードをタップで詳細、長押しでドラッグして動かせます
+- 検索で地図の中を探し、選ぶとそこへ寄ります
+- 「周辺だけ」でそのノートから2手以内だけに絞り込み
+- 「孤立しているノート」で、関係づけの抜けを拾えます
+
+配置は画面の縦横比に合わせて計算され、ラベルは重なるものを落として読める数だけ描きます。
 
 ### 2. 互換する（1ノート → 複数方向のカード）
 1つのノートから、選んだ**向き**の数だけカードが作られ、**それぞれ別々にスケジュールされます**。
@@ -104,7 +111,7 @@ Android アプリ（Kotlin / Jetpack Compose）。データはすべて端末内
 ```bash
 ./gradlew assembleDebug        # app/build/outputs/apk/debug/app-debug.apk
 ./gradlew assembleRelease      # app/build/outputs/apk/release/app-release.apk
-./gradlew testDebugUnitTest    # 63 件のユニットテスト
+./gradlew testDebugUnitTest    # 88 件のユニットテスト
 ```
 
 `git push` すると GitHub Actions（`.github/workflows/android.yml`）が同じものをビルドし、
@@ -128,6 +135,8 @@ app/src/main/java/com/tango/recall/
   data/ImportExport.kt     JSON バックアップ、TSV/CSV
   data/Seed.kt             初期データ
   ui/screens/ForceLayout.kt  つながり地図の力学配置
+  ui/screens/GraphCamera.kt  地図の拡大・移動の演算（テストで固定）
+  ui/screens/GraphFilters.kt 周辺だけ表示・孤立ノート・検索
   ui/screens/GraphScreen.kt  つながり地図の描画と操作
   ui/                      Compose の画面
 ```

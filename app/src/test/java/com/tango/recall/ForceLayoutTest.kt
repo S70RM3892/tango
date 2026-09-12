@@ -84,6 +84,19 @@ class ForceLayoutTest {
     }
 
     @Test
+    fun unlinkedNotesAreLaidOutAsAReadableGridRatherThanABlob() {
+        val nodes = (1..9).map { node(it.toLong(), degree = 0) }
+        val laid = ForceLayout.layout(GraphData(nodes, emptyList()))
+
+        val columns = laid.nodes.map { it.x }.distinct().sorted()
+        val rows = laid.nodes.map { it.y }.distinct().sorted()
+        assertEquals("9 isolated notes should form a 3x3 grid", 3, columns.size)
+        assertEquals(3, rows.size)
+        // Evenly spaced, not clustered.
+        assertEquals(columns[1] - columns[0], columns[2] - columns[1], 0.5f)
+    }
+
+    @Test
     fun neighbourLookupWorksFromBothEnds() {
         val laid = ForceLayout.layout(ring(5))
         val neighbours = laid.neighboursOf(0)
