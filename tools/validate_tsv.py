@@ -81,7 +81,10 @@ def check(path):
     return errs, warns, len(lines) - 1
 
 def main():
-    paths = sys.argv[1:] or sorted(glob.glob("data/**/*.tsv", recursive=True))
+    paths = sys.argv[1:] or [
+        p for p in sorted(glob.glob("data/**/*.tsv", recursive=True))
+        if os.path.basename(os.path.dirname(p)) in SPEC
+    ]
     if not paths:
         print("TSV が見つからない"); return 1
     bad = total = 0

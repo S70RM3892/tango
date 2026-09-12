@@ -36,16 +36,37 @@ python3 tools/validate_tsv.py data/english/*.tsv
 
 ## 現在の件数
 
-| 型 | ファイル | 件数 |
-|---|---|---|
-| english | kyodai_core_01.tsv | 99 |
-| eisakubun | kyodai_01.tsv | 31 |
-| chem_substance | muki_01.tsv | 55 |
-| chem_reaction | kogyo_jikken_01.tsv | 30 |
-| chem_calc | keisan_01.tsv | 20 |
-| basic | physics_01.tsv | 57 |
-| basic | math_teiseki_01.tsv | 40 |
-| basic | kobun_01.tsv | 74 |
-| | **合計** | **406** |
+| 型 | ファイル | 件数 | 用途 |
+|---|---|---|---|
+| basic | joho1_01.tsv | 95 | 共テ 情報Ⅰ |
+| english | kyodai_core_01.tsv | 99 | 二次 英語 |
+| basic | kobun_01.tsv | 74 | 二次 国語（古文） |
+| basic | seikei_01.tsv | 70 | 共テ 政経 |
+| basic | physics_01.tsv | 57 | 二次 理科 |
+| chem_substance | muki_01.tsv | 55 | 二次 理科 |
+| basic | math_teiseki_01.tsv | 40 | 二次 数学 |
+| eisakubun | kyodai_01.tsv | 31 | 二次 英語（和文英訳） |
+| chem_reaction | kogyo_jikken_01.tsv | 30 | 二次 理科 |
+| chem_calc | keisan_01.tsv | 20 | 二次 理科 |
+| | **合計** | **571** | |
 
-アプリ内蔵のシードは約70件なので、取り込むと約6.8倍になる。
+アプリ内蔵のシードは約70件なので、取り込むと約8.2倍になる。
+
+`data/universities/` は取り込みTSVではなく、アプリの `assets/universities.tsv` に
+追加する配点列の参照データ（`tools/validate_tsv.py` の対象外）。
+
+## 教科の優先順位
+
+件数の配分は配点比ではなく、`S70RM3892/-` の設問単位の分析にもとづく。
+全国上位2.3%相当の受験生が共通テストでまだ落としている点（1025点換算）:
+
+| 科目 | 取りこぼし |
+|---|---|
+| 情報Ⅰ | 6.0 〜 8.4点 |
+| 地歴公民（政経） | 3.0 〜 4.7点 |
+| 英語リスニング | 2.5 〜 3.7点 |
+| 数ⅠA・数ⅡBC・物理・化学の合計 | 4.7 〜 6.2点 |
+
+情報Ⅰ＋地歴公民だけで全体の54〜55%を占める。
+合計 16.6〜23.7点は情報学科の合格最低点の年変動σ（10.6点）の 1.6〜2.2 倍にあたる。
+だから件数が最も多いのは英単語ではなく情報Ⅰになっている。
