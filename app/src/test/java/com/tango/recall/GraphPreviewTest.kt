@@ -84,6 +84,29 @@ class GraphPreviewTest {
         )
     }
 
+
+    @Test
+    fun notesOfOneGroupSettleTogether() {
+        val laid = ForceLayout.layout(repo.graph(null), width = 720f, height = 1000f)
+        // 語根や分野ごとのまとまりが、地図の上でも島になっているか。小さな群れは放って
+        // おいても固まるので、崩れやすい大きな群れ（6語以上）だけを見る。ここが緩むと、
+        // 囲いを描いても「散らばった点を囲んだ枠」にしかならない。
+        val groups = laid.nodes.indices
+            .groupBy { laid.nodes[it].node.cluster }
+            .filterKeys { it.isNotBlank() }
+            .filterValues { it.size >= 6 }
+        assertTrue("seed should have big groups to gather", groups.size >= 15)
+
+        val diagonal = hypot(laid.width, laid.height)
+        val loose = groups.filter { (_, members) ->
+            val cx = members.map { laid.nodes[it].x }.average().toFloat()
+            val cy = members.map { laid.nodes[it].y }.average().toFloat()
+            members.map { hypot(laid.nodes[it].x - cx, laid.nodes[it].y - cy) }
+                .average() > diagonal * 0.12
+        }.keys
+        assertTrue("groups smeared across the map: $loose", loose.size <= 1)
+    }
+
     private fun dumpIfRequested(laid: com.tango.recall.ui.screens.LaidOutGraph) {
         val path = System.getenv("TANGO_GRAPH_DUMP") ?: return
         val json = buildString {
@@ -94,13 +117,14 @@ class GraphPreviewTest {
                 append(
                     "{\"x\":${positioned.x},\"y\":${positioned.y},\"type\":\"${node.typeId}\"," +
                         "\"degree\":${node.degree},\"strength\":${node.strength}," +
-                        "\"isNew\":${node.isNew},\"title\":\"${node.title.replace("\"", "'").replace("\\", "")}\"}"
+                        "\"isNew\":${node.isNew},\"cluster\":\"${node.cluster.replace("\"", "'").replace("\\", "")}\"," +
+                        "\"title\":\"${node.title.replace("\"", "'").replace("\\", "")}\"}"
                 )
             }
             append("],\"edges\":[")
             laid.edges.forEachIndexed { i, edge ->
                 if (i > 0) append(",")
-                append("{\"a\":${edge.fromIndex},\"b\":${edge.toIndex}}")
+                append("{\"a\":${edge.fromIndex},\"b\":${edge.toIndex},\"type\":\"${edge.typeId}\"}")
             }
             append("]}")
         }

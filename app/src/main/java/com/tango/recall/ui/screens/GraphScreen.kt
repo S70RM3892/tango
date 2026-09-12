@@ -60,8 +60,10 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.TextLayoutResult
@@ -75,11 +77,13 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.tango.recall.Routes
 import com.tango.recall.data.GraphData
+import com.tango.recall.data.LinkType
 import com.tango.recall.data.NoteType
 import com.tango.recall.data.Subject
 import com.tango.recall.ui.AppViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -88,7 +92,7 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 private const val MIN_SCALE = 0.25f
-private const val MAX_SCALE = 6f
+private const val MAX_SCALE = 12f
 private val FIELD_BACKGROUND = Color(0xFF0A0E1A)
 private const val CURVATURE = 0.10f
 
@@ -399,6 +403,28 @@ private fun GraphView(
     val positions = remember(graph) {
         mutableStateListOf<Offset>().apply { addAll(graph.nodes.map { Offset(it.x, it.y) }) }
     }
+    // Bumped when a node is let go, so the group shapes are rebuilt then rather than
+    // on every frame of a drag.
+    var settled by remember(graph) { mutableStateOf(0) }
+
+    // Notes that belong together — one root, one particle, one field. Groups of two are
+    // left alone: a shape around a pair says nothing a line between them does not.
+    val clusters = remember(graph) {
+        graph.nodes.withIndex()
+            .groupBy({ it.value.node.cluster }, { it.index })
+            .filterKeys { it.isNotBlank() }
+            .filterValues { it.size >= 3 }
+            .map { (name, members) ->
+                ClusterGroup(
+                    name = name,
+                    members = members,
+                    // A group is almost always of one kind; the commonest decides its hue.
+                    typeId = members.groupingBy { graph.nodes[it].node.typeId }
+                        .eachCount().maxByOrNull { it.value }?.key.orEmpty(),
+                )
+            }
+            .sortedByDescending { it.members.size }
+    }
 
     // How brightly each node burns. It is a forgetting curve per card, and it only
     // changes when the time slider moves — not on every frame of the animation.
@@ -406,6 +432,16 @@ private fun GraphView(
         FloatArray(graph.nodes.size) { i ->
             val node = graph.nodes[i].node
             if (node.isNew) 0f else (0.25f + 0.75f * node.strengthAt(atTime).toFloat())
+        }
+    }
+
+    // The group shapes live in layout coordinates, so they are built once per settled
+    // layout and only moved through the camera when drawn.
+    val shapes = remember(graph, settled) { clusterShapes(clusters, positions.toList(), graph) }
+    /** Which drawn shape each note belongs to, or -1. */
+    val shapeOf = remember(shapes) {
+        IntArray(graph.nodes.size) { -1 }.also { owner ->
+            shapes.forEachIndexed { i, shape -> shape.members.forEach { owner[it] = i } }
         }
     }
 
@@ -438,9 +474,25 @@ private fun GraphView(
         onCentred()
     }
 
+    // The mean distance between neighbouring notes, in layout units. The layout keeps
+    // every pair at least 0.62 of this apart, so it is also the budget a note has to
+    // draw itself in.
+    val density = LocalDensity.current.density
+    val spacing = remember(graph) {
+        if (graph.nodes.isEmpty()) 1f else sqrt(graph.width * graph.height / graph.nodes.size)
+    }
+
     fun radiusOf(index: Int): Float {
         val degree = graph.nodes[index].node.degree
-        return ((8f + 3.4f * sqrt(degree.toFloat())) * camera.scale).coerceIn(4f, 44f)
+        // Pulled back, a note drawn at its natural size would swallow its neighbours
+        // and the map would be a sheet of colour. Capping it under the guaranteed gap
+        // means the dots stay dots, and the shapes and names carry the reading.
+        val cap = minOf(44f, spacing * camera.scale * 0.26f).coerceAtLeast(2.5f)
+        // Grows with the square root of the zoom, not with the zoom: the gaps between
+        // notes widen faster than the notes themselves, which is what makes pushing in
+        // reveal anything. Drawn at full zoom the dots would stay packed edge to edge
+        // and there would never be room for a name.
+        return ((8f + 3.4f * sqrt(degree.toFloat())) * sqrt(camera.scale)).coerceIn(2.5f, cap)
     }
 
     fun hitTest(point: Offset): Int? {
@@ -473,7 +525,7 @@ private fun GraphView(
                     // Long press picks a node up; a plain drag falls through to panning.
                     detectDragGesturesAfterLongPress(
                         onDragStart = { dragging = hitTest(it) },
-                        onDragEnd = { dragging = null },
+                        onDragEnd = { dragging = null; settled++ },
                         onDragCancel = { dragging = null },
                         onDrag = { _, delta ->
                             dragging?.let { positions[it] = positions[it] + delta / camera.scale }
@@ -489,22 +541,60 @@ private fun GraphView(
             val neighbours = selected?.let { graph.neighboursOf(it).toSet() }.orEmpty()
             val animateAll = graph.edges.size <= 140
             val glowEverything = graph.nodes.size <= 200
+            // How much room each note has on screen right now — the gap the layout
+            // guarantees, seen through the camera, in dp: the names are sized in sp, so
+            // what counts is the room measured the same way the text is.
+            val detail = MapDetail.at(spacing * camera.scale / density)
+
+            // --- the groups, drawn behind everything --------------------------
+            for (shape in shapes) {
+                val dimmed = selected != null && selected !in shape.members
+                drawClusterShape(shape, camera, detail, appear, dimmed)
+            }
 
             // --- axons --------------------------------------------------------
             for (edge in graph.edges) {
+                // Pulled right back, a link inside a group says nothing the shape
+                // around that group is not already saying — and there are hundreds of
+                // them. What is worth seeing from there is what crosses between groups.
+                if (detail == MapDetail.GROUPS && selected == null &&
+                    shapeOf[edge.fromIndex] >= 0 && shapeOf[edge.fromIndex] == shapeOf[edge.toIndex]
+                ) continue
                 val p0 = camera.toScreen(positions[edge.fromIndex])
                 val p1 = camera.toScreen(positions[edge.toIndex])
-                val tint = colorFor(graph.nodes[edge.fromIndex].node.typeId)
+                val relation = LinkType.fromId(edge.typeId)
+                val tint = edgeColour(relation, graph.nodes[edge.fromIndex].node.typeId)
                 val highlighted = selected != null &&
                     (edge.fromIndex == selected || edge.toIndex == selected)
 
                 if (selected != null && !highlighted) {
-                    drawAxon(p0, p1, tint.copy(alpha = 0.13f * appear), 1.1f, null, 0f)
+                    drawAxon(p0, p1, tint.copy(alpha = 0.10f * appear), 1.1f, null, 0f, relation)
                 } else {
-                    val alpha = (if (highlighted) 0.9f else 0.42f) * appear
-                    val width = if (highlighted) 2.6f else 1.5f
+                    // From far out the links are texture: hundreds of them at full
+                    // strength cover the very thing they connect. They come back as
+                    // soon as the map is pushed in far enough to follow one.
+                    val alpha = (
+                        if (highlighted) 0.9f
+                        else when (detail) {
+                            MapDetail.GROUPS -> 0.14f
+                            MapDetail.HUBS -> 0.24f
+                            MapDetail.NOTES -> 0.40f
+                        }
+                    ) * appear
+                    val width = if (highlighted) 2.6f else if (detail == MapDetail.NOTES) 1.5f else 1f
                     val travelling = if (highlighted || animateAll) pulse else null
-                    drawAxon(p0, p1, tint.copy(alpha = alpha), width, travelling, if (highlighted) 1f else 0.45f)
+                    drawAxon(
+                        p0, p1, tint.copy(alpha = alpha), width, travelling,
+                        if (highlighted) 1f else 0.45f, relation,
+                    )
+                }
+                // Direction is half the meaning of 生成する / 派生語 / 上位概念, and a
+                // plain line throws it away.
+                // An arrowhead is only worth drawing where it can be read: a few
+                // hundred of them at once are a texture, not a direction.
+                if (!relation.symmetric && (highlighted || (selected == null && detail == MapDetail.NOTES))) {
+                    drawArrow(p0, p1, tint.copy(alpha = (if (highlighted) 0.95f else 0.5f) * appear),
+                        radiusOf(edge.toIndex))
                 }
             }
 
@@ -525,7 +615,9 @@ private fun GraphView(
                 val vitality = vitalities[index]
                 val dimmed = selected != null && !isSelected && !isNeighbour
 
-                if (glowEverything || isSelected || isNeighbour || node.degree >= 4) {
+                val glows = isSelected || isNeighbour ||
+                    (detail != MapDetail.GROUPS && (glowEverything || node.degree >= 4))
+                if (glows) {
                     val glowAlpha = (if (dimmed) 0.06f else 0.30f) * (0.35f + vitality) * appear
                     drawCircle(
                         brush = Brush.radialGradient(
@@ -538,7 +630,11 @@ private fun GraphView(
                     )
                 }
 
-                drawDendrites(centre, radius, tint.copy(alpha = (if (dimmed) 0.08f else 0.22f) * appear), index)
+                // Dendrites are texture, not information: at a distance they only
+                // thicken the field.
+                if (detail != MapDetail.GROUPS) {
+                    drawDendrites(centre, radius, tint.copy(alpha = (if (dimmed) 0.08f else 0.22f) * appear), index)
+                }
 
                 if (node.isNew) {
                     // Hollow, but not invisible: on a fresh install every note is new,
@@ -577,8 +673,22 @@ private fun GraphView(
                 }
             }
 
-            // --- labels, laid out last so nothing draws over them --------------
-            drawLabels(measurer, graph, positions, camera, selected, neighbours, appear) { radiusOf(it) }
+            // --- names, laid out last so nothing draws over them ---------------
+            // Group names go down first and take their space; a note label that would
+            // land on one is dropped instead, because the group name is the one that
+            // still means something when you cannot read the rest.
+            val taken = mutableListOf<Rect>()
+            for (shape in shapes) {
+                val dimmed = selected != null && selected !in shape.members
+                val box = drawClusterName(measurer, shape, camera, detail, appear, dimmed, taken)
+                if (box != null) taken += box
+            }
+            if (detail != MapDetail.GROUPS || selected != null) {
+                drawLabels(
+                    measurer, graph, positions, camera, selected, neighbours, appear, detail,
+                    reserved = taken,
+                ) { radiusOf(it) }
+            }
             selected?.let { drawEdgeLabels(measurer, graph, positions, camera, it, appear) }
         }
 
@@ -595,7 +705,7 @@ private fun GraphView(
         )
 
         Text(
-            "2本指で拡大・縮小／長押しでノードを動かす",
+            "引くと語根・分野のかたまり、寄ると1語ずつ。2本指で拡大・縮小、長押しで動かせます",
             style = MaterialTheme.typography.labelSmall,
             color = Color.White.copy(alpha = 0.45f),
             modifier = Modifier.align(Alignment.TopStart).padding(12.dp).fillMaxWidth(0.62f),
@@ -731,6 +841,207 @@ private fun ControlButton(label: String, onClick: () -> Unit) {
     }
 }
 
+/**
+ * One group of notes, as it currently sits on screen.
+ *
+ * Held together rather than recomputed while drawing, so a hull is built once per
+ * settled layout instead of sixty times a second.
+ */
+/** Notes that belong to one root, one particle, one field. */
+private data class ClusterGroup(val name: String, val members: List<Int>, val typeId: String)
+
+private data class ClusterShape(
+    val name: String,
+    val members: Set<Int>,
+    val outline: List<Offset>,
+    val blob: GraphGeometry.Blob,
+    val centre: Offset,
+    /** The middle of the shape's top edge: where its name hangs. */
+    val crown: Offset,
+    val tint: Color,
+)
+
+/** At most this many group shapes are drawn; past that the map is a field of outlines. */
+private const val MAX_CLUSTER_SHAPES = 64
+
+/**
+ * Build the shapes behind the groups.
+ *
+ * Two things are refused, because both make the map worse than no shapes at all. A
+ * group whose notes ended up scattered is skipped: a hull round them would enclose
+ * half the screen and say nothing. And a group sitting largely inside a shape that has
+ * already been drawn is skipped too — overlapping outlines read as noise, not as
+ * grouping. Big groups are considered first, so what survives is the coarse structure.
+ */
+private fun clusterShapes(
+    clusters: List<ClusterGroup>,
+    positions: List<Offset>,
+    graph: LaidOutGraph,
+): List<ClusterShape> {
+    if (positions.isEmpty()) return emptyList()
+    // The distance between neighbouring notes, roughly: the layout spreads every note
+    // over the whole board, so the area each one holds gives the scale of everything.
+    val spacing = sqrt(graph.width * graph.height / positions.size.toFloat())
+    val ceiling = minOf(graph.width, graph.height) * 0.28f
+    val kept = ArrayList<ClusterShape>()
+
+    for (group in clusters) {
+        if (kept.size >= MAX_CLUSTER_SHAPES) break
+        val points = group.members.map { positions[it] }
+        // How far from its centre a group of this size would sit if it were packed
+        // tightly. Beyond a few times that, the notes are not really together.
+        val packed = 0.67f * sqrt(group.members.size / PI.toFloat()) * spacing
+        if (GraphGeometry.spread(points) > minOf(packed * 2.6f, ceiling)) continue
+
+        val centre = GraphGeometry.centroid(points)
+        if (kept.any { GraphGeometry.contains(it.outline, centre) }) continue
+        val swallowed = kept.sumOf { shape ->
+            points.count { GraphGeometry.contains(shape.outline, it) }
+        }
+        if (swallowed > points.size * 0.34f) continue
+
+        val outline = GraphGeometry.expand(
+            GraphGeometry.convexHull(points),
+            padding = spacing * 0.75f + minOf(graph.width, graph.height) * 0.006f,
+        )
+        val blob = GraphGeometry.smooth(outline) ?: continue
+        val top = outline.minOf { it.y }
+        kept += ClusterShape(
+            name = group.name,
+            members = group.members.toSet(),
+            outline = outline,
+            blob = blob,
+            centre = centre,
+            crown = Offset(centre.x, top),
+            tint = colorFor(group.typeId),
+        )
+    }
+    return kept
+}
+
+private fun DrawScope.drawClusterShape(
+    shape: ClusterShape,
+    camera: GraphCamera,
+    detail: MapDetail,
+    appear: Float,
+    dimmed: Boolean,
+) {
+    val path = Path().apply {
+        val start = camera.toScreen(shape.blob.start)
+        moveTo(start.x, start.y)
+        for (bend in shape.blob.bends) {
+            val control = camera.toScreen(bend.control)
+            val end = camera.toScreen(bend.end)
+            quadraticTo(control.x, control.y, end.x, end.y)
+        }
+        close()
+    }
+    val strength = (if (dimmed) 0.3f else 1f) * appear
+    // Pulled back the shapes carry the map, so they fill more strongly; pushed in they
+    // step back to being a boundary around notes that are legible on their own.
+    val fill = when (detail) {
+        MapDetail.GROUPS -> 0.10f
+        MapDetail.HUBS -> 0.065f
+        MapDetail.NOTES -> 0.035f
+    }
+    drawPath(path, shape.tint.copy(alpha = fill * strength))
+    drawPath(
+        path,
+        shape.tint.copy(alpha = (if (detail == MapDetail.NOTES) 0.16f else 0.34f) * strength),
+        style = Stroke(width = if (detail == MapDetail.GROUPS) 1.6f else 1.2f),
+    )
+}
+
+/**
+ * The group's name, hung over the top of its shape.
+ *
+ * That is the point of the whole treatment: at a distance you should read
+ * "spect / spic（見る）" and "気体の製法", not eight hundred dots. The name sits above
+ * the shape rather than in the middle of it, where the notes are densest, and takes a
+ * dark backing so it stays readable over whatever it crosses.
+ *
+ * Returns the box it took, so node labels can be kept out of it.
+ */
+private fun DrawScope.drawClusterName(
+    measurer: TextMeasurer,
+    shape: ClusterShape,
+    camera: GraphCamera,
+    detail: MapDetail,
+    appear: Float,
+    dimmed: Boolean,
+    taken: List<Rect>,
+): Rect? {
+    val alpha = when (detail) {
+        MapDetail.GROUPS -> 0.95f
+        MapDetail.HUBS -> 0.8f
+        MapDetail.NOTES -> 0.4f
+    } * (if (dimmed) 0.35f else 1f) * appear
+    if (alpha < 0.08f) return null
+    val layout = measurer.measure(
+        shortLabel(shape.name, budget = 24),
+        TextStyle(
+            color = shape.tint.copy(alpha = alpha),
+            fontSize = if (detail == MapDetail.GROUPS) 14.sp else 12.sp,
+            fontWeight = FontWeight.SemiBold,
+        ),
+    )
+    val crown = camera.toScreen(shape.crown)
+    if (crown.x < -size.width * 0.2f || crown.x > size.width * 1.2f) return null
+    if (crown.y < -layout.size.height || crown.y > size.height + layout.size.height) return null
+    // Held inside the screen rather than clipped mid-word: a name half off the edge
+    // names nothing.
+    val topLeft = Offset(
+        (crown.x - layout.size.width / 2f)
+            .coerceIn(6f, (size.width - layout.size.width - 6f).coerceAtLeast(6f)),
+        (crown.y - layout.size.height - 4f).coerceIn(4f, (size.height - layout.size.height - 4f).coerceAtLeast(4f)),
+    )
+    val box = Rect(
+        topLeft.x - 5f, topLeft.y - 2f,
+        topLeft.x + layout.size.width + 5f, topLeft.y + layout.size.height + 2f,
+    )
+    if (taken.any { it.overlaps(box) }) return null
+    drawRoundRect(
+        color = FIELD_BACKGROUND.copy(alpha = 0.62f * appear),
+        topLeft = Offset(box.left, box.top),
+        size = Size(box.width, box.height),
+        cornerRadius = androidx.compose.ui.geometry.CornerRadius(7f, 7f),
+    )
+    drawText(layout, topLeft = topLeft)
+    return box
+}
+
+/** An arrowhead at the far end of a directed relation. */
+private fun DrawScope.drawArrow(p0: Offset, p1: Offset, color: Color, targetRadius: Float) {
+    if (hypot(p1.x - p0.x, p1.y - p0.y) < targetRadius * 2.5f) return
+    val control = controlPointFor(p0, p1)
+    // Come in along the curve, not along the straight line, or the head sits askew.
+    val approach = pointOnAxon(p0, control, p1, 0.86f)
+    val head = GraphGeometry.arrowHead(approach, p1, size = 11f, gap = targetRadius + 3f)
+    drawPath(
+        Path().apply {
+            moveTo(head[0].x, head[0].y)
+            lineTo(head[1].x, head[1].y)
+            lineTo(head[2].x, head[2].y)
+            close()
+        },
+        color,
+    )
+}
+
+/**
+ * The colour of a relation.
+ *
+ * Most links take the colour of the note they leave, which keeps the map readable by
+ * subject. The two that carry a warning — a pair you keep confusing, a pair that are
+ * opposites — are given their own colour, because those are the ones worth spotting
+ * from across the map.
+ */
+private fun edgeColour(relation: LinkType, fromTypeId: String): Color = when (relation) {
+    LinkType.CONFUSABLE -> Color(0xFFFB7185)
+    LinkType.ANTONYM, LinkType.CONTRAST -> Color(0xFFFCD34D)
+    else -> colorFor(fromTypeId)
+}
+
 /** A slightly curved, tapered connection, optionally carrying a travelling signal. */
 private fun DrawScope.drawAxon(
     p0: Offset,
@@ -739,19 +1050,26 @@ private fun DrawScope.drawAxon(
     width: Float,
     travel: Float?,
     signalStrength: Float,
+    relation: LinkType = LinkType.RELATED,
 ) {
     val dx = p1.x - p0.x
     val dy = p1.y - p0.y
     if (hypot(dx, dy) < 0.5f) return
     val control = controlPointFor(p0, p1)
 
+    // Opposites are drawn broken, so a contrast reads as a contrast without being
+    // selected first.
+    val dashed = relation == LinkType.ANTONYM || relation == LinkType.CONTRAST
     drawPath(
         Path().apply {
             moveTo(p0.x, p0.y)
             quadraticTo(control.x, control.y, p1.x, p1.y)
         },
         color,
-        style = Stroke(width = width),
+        style = Stroke(
+            width = width,
+            pathEffect = if (dashed) PathEffect.dashPathEffect(floatArrayOf(7f, 6f)) else null,
+        ),
     )
 
     if (travel != null && signalStrength > 0f) {
@@ -813,6 +1131,8 @@ private fun DrawScope.drawLabels(
     selected: Int?,
     neighbours: Set<Int>,
     appear: Float,
+    detail: MapDetail,
+    reserved: List<Rect>,
     radiusOf: (Int) -> Float,
 ) {
     val order = graph.nodes.indices.sortedByDescending { index ->
@@ -831,14 +1151,21 @@ private fun DrawScope.drawLabels(
         if (centre.x < -r || centre.y < -r || centre.x > size.width + r || centre.y > size.height + r) null
         else Rect(centre.x - r, centre.y - r, centre.x + r, centre.y + r)
     }
+    placed += reserved
     var drawn = 0
     for (index in order) {
         if (drawn >= MAX_LABELS) break
         val node = graph.nodes[index].node
         val dimmed = selected != null && index != selected && index !in neighbours
-        // At a distance only the hubs are named; zoom in and the rest appear.
+        // At a distance the groups carry the names; closer in, the notes that hold a
+        // group together; closer still, everything that fits.
         if (dimmed && camera.scale < 1.2f) continue
-        if (selected == null && camera.scale < 0.8f && node.degree < 3) continue
+        val keep = when (detail) {
+            MapDetail.GROUPS -> index == selected || index in neighbours
+            MapDetail.HUBS -> index == selected || index in neighbours || node.degree >= 3
+            MapDetail.NOTES -> true
+        }
+        if (!keep) continue
 
         val centre = camera.toScreen(positions[index])
         if (centre.x < 0f || centre.y < 0f || centre.x > size.width || centre.y > size.height) continue
@@ -852,23 +1179,37 @@ private fun DrawScope.drawLabels(
                 fontWeight = if (index == selected) FontWeight.Bold else FontWeight.Medium,
             ),
         )
-        // Nudge a label that would run off the edge back inside, rather than letting
-        // it be clipped mid-word.
-        val labelX = (centre.x - layout.size.width / 2f)
-            .coerceIn(4f, (size.width - layout.size.width - 4f).coerceAtLeast(4f))
-        val topLeft = Offset(labelX, centre.y + radiusOf(index) + 6f)
-        if (topLeft.y + layout.size.height > size.height) continue
-        val rect = Rect(
-            topLeft.x - 3f,
-            topLeft.y - 2f,
-            topLeft.x + layout.size.width + 3f,
-            topLeft.y + layout.size.height + 2f,
+        // Under the note is where a name belongs, but on a crowded map that spot is
+        // usually taken by the next note along. Trying the other three sides before
+        // giving up is the difference between a map with forty names on it and one
+        // with two hundred.
+        val r = radiusOf(index)
+        val width = layout.size.width.toFloat()
+        val height = layout.size.height.toFloat()
+        val candidates = listOf(
+            Offset(centre.x - width / 2f, centre.y + r + 6f),
+            Offset(centre.x - width / 2f, centre.y - r - 6f - height),
+            Offset(centre.x + r + 6f, centre.y - height / 2f),
+            Offset(centre.x - r - 6f - width, centre.y - height / 2f),
         )
-        if (placed.any { it.overlaps(rect) }) continue
+        var chosen: Rect? = null
+        var at = Offset.Zero
+        for (candidate in candidates) {
+            // Nudge a label that would run off the edge back inside, rather than
+            // letting it be clipped mid-word.
+            val x = candidate.x.coerceIn(4f, (size.width - width - 4f).coerceAtLeast(4f))
+            if (candidate.y < 0f || candidate.y + height > size.height) continue
+            val rect = Rect(x - 3f, candidate.y - 2f, x + width + 3f, candidate.y + height + 2f)
+            if (placed.any { it.overlaps(rect) }) continue
+            chosen = rect
+            at = Offset(x, candidate.y)
+            break
+        }
+        val rect = chosen ?: continue
 
         placed += rect
         drawn++
-        drawText(layout, topLeft = topLeft)
+        drawText(layout, topLeft = at)
     }
 }
 
@@ -987,8 +1328,12 @@ private fun Legend(graph: LaidOutGraph, modifier: Modifier = Modifier) {
                 MaterialTheme.colorScheme.onSurface,
             )
         }
+        Pill("かたまり = 語根・分野", Color.Transparent, MaterialTheme.colorScheme.onSurfaceVariant)
         Pill("明るい = 覚えている", Color.Transparent, MaterialTheme.colorScheme.onSurfaceVariant)
         Pill("輪郭だけ = 未学習", Color.Transparent, MaterialTheme.colorScheme.onSurfaceVariant)
+        Pill("→ = 向きのある関係（寄ると出る）", Color.Transparent, MaterialTheme.colorScheme.onSurfaceVariant)
+        Pill("破線 = 対義・対比", Color(0xFFFCD34D).copy(alpha = 0.25f), MaterialTheme.colorScheme.onSurface)
+        Pill("赤 = 混同注意", Color(0xFFFB7185).copy(alpha = 0.25f), MaterialTheme.colorScheme.onSurface)
     }
 }
 
@@ -1020,7 +1365,7 @@ private fun Char.isWide(): Boolean =
         code in 0xF900..0xFAFF || code in 0xFE30..0xFE6F || code in 0xFF00..0xFF60 ||
         code in 0xFFE0..0xFFE6
 
-private const val MAX_LABELS = 60
+private const val MAX_LABELS = 140
 
 /** One hue per note type, chosen to stay legible on the dark field. */
 private fun colorFor(typeId: String): Color = when (typeId) {

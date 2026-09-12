@@ -25,6 +25,13 @@ data class GraphNode(
     val typeId: String,
     val title: String,
     val subtitle: String,
+    /**
+     * The group this note belongs to on the map — a root, a particle, a field.
+     *
+     * Drawn as a named shape behind its members, because eight hundred dots with no
+     * grouping is not a map of anything.
+     */
+    val cluster: String = "",
     val degree: Int,
     /** Mean predicted recall across this note's cards, 0..1. Drives how brightly it glows. */
     val strength: Double,
@@ -854,6 +861,7 @@ class Repository(private val helper: TangoDb) {
                 typeId = note.typeId,
                 title = note.title(),
                 subtitle = note.subtitle(),
+                cluster = clusterOf(note),
                 degree = degree[note.id] ?: 0,
                 strength = if (seen.isEmpty()) 0.0 else seen.map { sched.retrievability(it.srs, now) }.average(),
                 isNew = seen.isEmpty(),
@@ -865,6 +873,19 @@ class Repository(private val helper: TangoDb) {
             GraphEdge(it.fromNoteId, it.toNoteId, it.typeId, it.type.forward)
         }
         return GraphData(nodes, edges)
+    }
+
+    /**
+     * Which group a note belongs to on the map.
+     *
+     * Words gather by root and idioms by particle, because that is how they were
+     * learned. Everything else uses its most specific tag — 沈殿, 気体の製法, 平衡,
+     * 整数 — which is the level at which the material actually clusters.
+     */
+    private fun clusterOf(note: Note): String = when (note.type) {
+        NoteType.ENGLISH -> note["root"].trim().ifBlank { note.type.label }
+        NoteType.IDIOM -> note["family"].trim().ifBlank { note.type.label }
+        else -> note.tags.lastOrNull()?.trim()?.ifBlank { null } ?: note.type.label
     }
 
     /**

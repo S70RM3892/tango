@@ -81,6 +81,23 @@ object ForceLayout {
             y[i] = (height / 2 + height * spread * sin(angle)).toFloat()
         }
 
+        // Which group each note belongs to — one root, one field, one particle. Groups
+        // of one or two are left out: there is nothing to gather.
+        val clusterOf = IntArray(n) { -1 }
+        run {
+            val counts = nodes.groupingBy { it.cluster }.eachCount()
+            val ids = HashMap<String, Int>()
+            for (i in 0 until n) {
+                val name = nodes[i].cluster
+                if (name.isBlank() || (counts[name] ?: 0) < 3) continue
+                clusterOf[i] = ids.getOrPut(name) { ids.size }
+            }
+        }
+        val clusterCount = clusterOf.maxOrNull()?.plus(1) ?: 0
+        val clusterX = FloatArray(clusterCount)
+        val clusterY = FloatArray(clusterCount)
+        val clusterN = IntArray(clusterCount)
+
         val area = width * height
         val k = sqrt(area / n)
         val cutoff = k * REPULSION_CUTOFF
@@ -134,6 +151,31 @@ object ForceLayout {
                 val uy = deltaY / distance
                 dx[a] -= ux * attraction; dy[a] -= uy * attraction
                 dx[b] += ux * attraction; dy[b] += uy * attraction
+            }
+
+            // Notes of one group pull towards their own middle. Without this the
+            // layout only knows about individual links, so a root with eight words
+            // ends up smeared through whatever else it happens to touch; with it the
+            // groups settle into islands you can name and point at.
+            if (clusterCount > 0) {
+                java.util.Arrays.fill(clusterX, 0f)
+                java.util.Arrays.fill(clusterY, 0f)
+                java.util.Arrays.fill(clusterN, 0)
+                for (i in 0 until n) {
+                    val c = clusterOf[i]
+                    if (c < 0) continue
+                    clusterX[c] += x[i]; clusterY[c] += y[i]; clusterN[c]++
+                }
+                for (c in 0 until clusterCount) {
+                    if (clusterN[c] == 0) continue
+                    clusterX[c] /= clusterN[c]; clusterY[c] /= clusterN[c]
+                }
+                for (i in 0 until n) {
+                    val c = clusterOf[i]
+                    if (c < 0) continue
+                    dx[i] += (clusterX[c] - x[i]) * COHESION
+                    dy[i] += (clusterY[c] - y[i]) * COHESION
+                }
             }
 
             for (i in 0 until n) {
@@ -257,6 +299,8 @@ object ForceLayout {
 
     private const val SEED = 20260912L
     private const val GRAVITY = 0.02f
+    /** How strongly notes of one group are drawn to their own middle. */
+    private const val COHESION = 0.18f
     /** Repulsion range, in multiples of the ideal edge length. */
     private const val REPULSION_CUTOFF = 3.2f
     /** Closest two notes may end up, in multiples of the mean spacing. */
