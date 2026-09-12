@@ -36,6 +36,7 @@ object Seed {
         "chem_theory" to ::seedChemTheory,
         "idioms" to ::seedIdioms,
         "reading" to ::seedReading,
+        "affixes" to ::seedAffixes,
     )
 
     /** What the starter content consisted of before it was split into packs. */

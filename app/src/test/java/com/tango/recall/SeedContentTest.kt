@@ -100,6 +100,31 @@ class SeedContentTest {
     }
 
     @Test
+    fun everyAffixSaysWhatItDoesAndPointsAtRealWords() {
+        val affixes = notesOf(NoteType.AFFIX)
+        assertTrue("接辞の数", affixes.size >= 40)
+        for (note in affixes) {
+            val affix = note["affix"]
+            assertTrue("$affix の種類がない", note["kind"].isNotBlank())
+            assertTrue("$affix の働きの説明がない", note["effect"].isNotBlank())
+            assertTrue("$affix の語例がない", note["examples"].isNotBlank())
+        }
+        // The point of the affix cards is that they hang off words already in the
+        // collection, so most of them must actually be linked to some.
+        val linked = affixes.count { note -> repo.related(note.id).any { it.other.type == NoteType.ENGLISH } }
+        assertTrue("語とつながっている接辞が少なすぎる ($linked / ${affixes.size})", linked >= 20)
+    }
+
+    @Test
+    fun theHardWordsAreThere() {
+        val words = notesOf(NoteType.ENGLISH).map { it.title() }
+        assertTrue("難語の層", notesOf(NoteType.ENGLISH).count { "難語" in it["root"] } >= 60)
+        for (expected in listOf("ubiquitous", "vulnerable", "elusive", "exacerbate", "salient")) {
+            assertTrue("$expected がない", expected in words)
+        }
+    }
+
+    @Test
     fun everyCalculationHasAReadableAnswer() {
         for (note in notesOf(NoteType.CHEM_CALC)) {
             assertNotNull("${note.title()} の答えが数値として読めない", parseNumber(note["answer"]))

@@ -154,9 +154,17 @@ object ForceLayout {
 
         normaliseInPlace(x, y, width, height)
         // Separation has to happen in final coordinates: doing it before the rescale
-        // means the rescale shrinks the gaps straight back out again.
-        separate(x, y, n, minimumGap = sqrt(width * height / n) * MIN_GAP)
+        // means the rescale shrinks the gaps straight back out again. A crowded map
+        // needs more passes to settle, and the clamp at the edges undoes a little of
+        // the work, so it is separated again after being brought inside.
+        val minimumGap = sqrt(width * height / n) * MIN_GAP
+        val passes = if (n > 300) 140 else 40
+        separate(x, y, n, minimumGap, passes)
         clampInPlace(x, y, n, width, height)
+        if (n > 300) {
+            separate(x, y, n, minimumGap, passes = 40)
+            clampInPlace(x, y, n, width, height)
+        }
 
         return LaidOutGraph(
             nodes.mapIndexed { i, node -> PositionedNode(node, x[i], y[i]) },

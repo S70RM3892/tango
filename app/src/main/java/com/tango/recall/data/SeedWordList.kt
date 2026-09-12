@@ -104,6 +104,28 @@ private val CROSS_LINKS: List<Triple<String, String, Pair<LinkType, String>>> = 
     Triple("precise", "concise", LinkType.CONFUSABLE to "正確 / 簡潔。つづりが近く意味が違う"),
     Triple("fundamental", "profound", LinkType.SYNONYM to "どちらも「根の深い」。profound は影響の深さに使う"),
     Triple("conclude", "exclude", LinkType.CONTRAST to "同じ clud（閉じる）。締めくくる / 締め出す"),
+    Triple("intrinsic", "incidental", LinkType.ANTONYM to "本質的に備わる ↔ たまたま付随する"),
+    Triple("innate", "inherent", LinkType.SYNONYM to "生まれつき / もともと備わっている。innate は人・生物に使う"),
+    Triple("tangible", "obscure", LinkType.CONTRAST to "手で触れられるほど具体的 ↔ はっきりしない"),
+    Triple("ubiquitous", "sparse", LinkType.ANTONYM to "どこにでもある ↔ まばら"),
+    Triple("transient", "perpetual", LinkType.ANTONYM to "つかの間 ↔ 絶え間ない"),
+    Triple("ephemeral", "transient", LinkType.SYNONYM to "どちらも「長く続かない」。ephemeral のほうが文学的"),
+    Triple("exacerbate", "mitigate", LinkType.ANTONYM to "悪化させる ↔ 和らげる。評論で対になって出る"),
+    Triple("undermine", "foster", LinkType.ANTONYM to "弱める ↔ 育てる"),
+    Triple("feasible", "futile", LinkType.CONTRAST to "やればできる ↔ やっても無駄"),
+    Triple("viable", "feasible", LinkType.SYNONYM to "実行可能。viable は「存続できる」の含み"),
+    Triple("cogent", "spurious", LinkType.ANTONYM to "筋が通っている ↔ 見せかけ"),
+    Triple("candid", "ambivalent", LinkType.CONTRAST to "率直に言い切る ↔ 気持ちが二つに割れている"),
+    Triple("vulnerable", "resilient", LinkType.ANTONYM to "傷つきやすい ↔ 立ち直る力がある"),
+    Triple("precarious", "robust", LinkType.ANTONYM to "崩れやすい ↔ 揺るがない"),
+    Triple("discern", "perceive", LinkType.SYNONYM to "見分ける / 知覚する。discern は差を見分ける含み"),
+    Triple("scrutinize", "overlook", LinkType.ANTONYM to "精査する ↔ 見落とす"),
+    Triple("succinct", "redundant", LinkType.ANTONYM to "簡潔 ↔ 冗長"),
+    Triple("superficial", "profound", LinkType.ANTONYM to "表面的 ↔ 深い"),
+    Triple("obsolete", "unprecedented", LinkType.CONTRAST to "もう使われない ↔ まだ例がない。時間の両端"),
+    Triple("acute", "mundane", LinkType.CONTRAST to "際立って深刻 ↔ ありふれている"),
+    Triple("compelling", "plausible", LinkType.CONTRAST to "抗しがたい説得力 ↔ もっともらしいだけ"),
+    Triple("paramount", "marginal", LinkType.ANTONYM to "最重要 ↔ わずか・周辺的"),
 )
 
 private val WORD_TABLE = """
@@ -265,6 +287,77 @@ legislation|法律、立法|名|社会の語彙|New legislation came into force 
 discrimination|差別、識別|名|社会の語彙|The law forbids discrimination of any kind.|その法律はいかなる差別も禁じている。|discrimination against
 prejudice|偏見|名|社会の語彙|Prejudice is hard to argue away.|偏見は議論では取り除きにくい。|racial prejudice
 interfere|干渉する、邪魔をする|動|fer（運ぶ）|Do not interfere with the experiment while it runs.|実験中に手を出してはいけない。|interfere with
+dubious|疑わしい、怪しい|形|難語（確かさ・あいまいさ）|The evidence for that claim is dubious at best.|その主張の証拠はよくても疑わしい。|dubious about
+elusive|とらえどころのない|形|難語（確かさ・あいまいさ）|The cause has proved elusive for thirty years.|その原因は30年間つかめないままだ。|an elusive concept
+obscure|不明瞭な、世に知られない|形・動|難語（確かさ・あいまいさ）|The origin of the custom remains obscure.|その習慣の起源は不明のままだ。|obscure the issue
+vague|漠然とした|形|難語（確かさ・あいまいさ）|He gave a vague answer and changed the subject.|彼は漠然と答えて話題を変えた。|a vague idea
+spurious|見せかけの、偽の|形|難語（確かさ・あいまいさ）|The correlation turned out to be spurious.|その相関は見せかけのものと判明した。|a spurious argument
+acute|鋭い、深刻な|形|難語（程度・強さ）|The shortage became acute within weeks.|不足は数週間で深刻になった。|an acute shortage
+drastic|思い切った、激烈な|形|難語（程度・強さ）|Drastic measures were taken to stop the spread.|拡大を止めるため思い切った措置がとられた。|a drastic change
+stark|厳然とした、殺風景な|形|難語（程度・強さ）|The figures stand in stark contrast to the claim.|その数字は主張と厳然たる対照をなす。|in stark contrast to
+formidable|手ごわい、恐るべき|形|難語（程度・強さ）|They faced a formidable technical problem.|彼らは手ごわい技術的問題に直面した。|a formidable obstacle
+immense|莫大な|形|難語（程度・強さ）|The immense cost was hidden in the footnotes.|莫大な費用は注に隠されていた。|immense pressure
+ingenious|巧妙な、独創的な|形|難語（評価・肯定）|Her proof is short and ingenious.|彼女の証明は短くて巧妙だ。|an ingenious solution
+lucid|明晰な|形|難語（評価・肯定）|The book gives a lucid account of the theory.|その本は理論を明晰に説明している。|a lucid explanation
+meticulous|細心の|形|難語（評価・肯定）|The record is meticulous down to the minute.|その記録は分単位まで細心に残されている。|meticulous attention
+prudent|慎重な、賢明な|形|難語（評価・肯定）|It would be prudent to check the figures twice.|数字を二度確かめるのが賢明だろう。|a prudent decision
+resilient|回復力のある|形|難語（評価・肯定）|Small communities proved surprisingly resilient.|小さな共同体は驚くほど回復力があった。|a resilient system
+robust|頑健な、揺るがない|形|難語（評価・肯定）|The finding is robust across three data sets.|その知見は3つのデータで揺るがなかった。|a robust conclusion
+futile|無駄な|形|難語（評価・否定）|Further argument would have been futile.|これ以上議論しても無駄だっただろう。|a futile attempt
+redundant|余分な、冗長な|形|難語（評価・否定）|The second paragraph is redundant.|第2段落は余分だ。|redundant information
+superficial|表面的な|形|難語（評価・否定）|The resemblance is superficial only.|その類似は表面的なものにすぎない。|a superficial reading
+frivolous|軽薄な、取るに足らない|形|難語（評価・否定）|The court dismissed the claim as frivolous.|裁判所はその訴えを取るに足らないとして退けた。|a frivolous objection
+mundane|平凡な、ありふれた|形|難語（評価・否定）|Most of the work is mundane and repetitive.|仕事の大半は平凡で反復的だ。|mundane tasks
+obsolete|すたれた、時代遅れの|形|難語（評価・否定）|The method became obsolete within a decade.|その方法は10年で時代遅れになった。|technically obsolete
+transient|一時的な、はかない|形|難語（時間・変化）|The improvement was transient and soon reversed.|改善は一時的で、すぐに元に戻った。|a transient effect
+ephemeral|つかの間の|形|難語（時間・変化）|Fame of that kind is ephemeral.|その種の名声はつかの間のものだ。|ephemeral pleasures
+imminent|差し迫った|形|難語（時間・変化）|There was no sign of imminent danger.|差し迫った危険の兆候はなかった。|an imminent threat
+perpetual|絶え間ない、永続する|形|難語（時間・変化）|The village lives under perpetual mist.|その村は絶え間ない霧の下にある。|a perpetual cycle
+stagnant|停滞した|形|難語（時間・変化）|Wages have been stagnant for a decade.|賃金は10年間停滞している。|a stagnant economy
+unprecedented|前例のない|形|難語（時間・変化）|The scale of the migration was unprecedented.|その移動の規模は前例のないものだった。|an unprecedented increase
+ubiquitous|どこにでもある|形|難語（分布・範囲）|Screens are now ubiquitous in classrooms.|画面はいまや教室のどこにでもある。|become ubiquitous
+pervasive|広く行きわたった|形|難語（分布・範囲）|The influence is pervasive but hard to measure.|その影響は広く及んでいるが測りにくい。|a pervasive assumption
+sparse|まばらな|形|難語（分布・範囲）|Evidence for the earlier period is sparse.|より古い時代の証拠はまばらだ。|sparse data
+rampant|はびこっている|形|難語（分布・範囲）|Rumour was rampant in the days that followed.|その後の数日は噂がはびこっていた。|rampant inflation
+widespread|広範囲の|形|難語（分布・範囲）|The practice is widespread but rarely discussed.|その慣行は広く行われているがめったに論じられない。|widespread use
+intrinsic|本質的な、内在する|形|難語（本質・付随）|Curiosity has an intrinsic value of its own.|好奇心にはそれ自体の内在的な価値がある。|intrinsic to
+innate|生まれつきの|形|難語（本質・付随）|The ability is learned rather than innate.|その能力は生まれつきではなく学ばれたものだ。|an innate tendency
+incidental|付随的な、偶発的な|形|難語（本質・付随）|The discovery was incidental to the main study.|その発見は本研究に付随したものだった。|incidental to
+tangible|実体のある、具体的な|形|難語（本質・付随）|There were no tangible results after two years.|2年たっても具体的な成果はなかった。|tangible evidence
+salient|際立った、要点となる|形|難語（本質・付随）|The salient point is easy to miss.|要点は見落としやすい。|the salient features
+vulnerable|傷つきやすい、脆弱な|形|難語（危うさ・強さ）|Young trees are vulnerable to sudden frost.|若木は突然の霜に弱い。|vulnerable to
+precarious|不安定な、危うい|形|難語（危うさ・強さ）|The balance is precarious and easily lost.|その均衡は危うく、簡単に崩れる。|a precarious position
+fragile|もろい|形|難語（危うさ・強さ）|The agreement was fragile from the start.|その合意は最初からもろいものだった。|a fragile truce
+tenacious|粘り強い|形|難語（危うさ・強さ）|He was tenacious in defending the idea.|彼はその考えを粘り強く擁護した。|a tenacious memory
+relentless|容赦ない、絶え間ない|形|難語（危うさ・強さ）|The relentless noise made study impossible.|絶え間ない騒音のせいで勉強できなかった。|relentless pressure
+candid|率直な|形|難語（態度・判断）|Her candid assessment surprised everyone.|彼女の率直な評価は全員を驚かせた。|a candid account
+ambivalent|相反する感情をもつ|形|難語（態度・判断）|He was ambivalent about leaving the city.|彼は町を離れることに心が二つに割れていた。|ambivalent about
+sober|冷静な、地味な|形|難語（態度・判断）|The report takes a sober view of the risks.|その報告は危険を冷静に見ている。|a sober assessment
+cogent|説得力のある|形|難語（態度・判断）|She made a cogent case for the change.|彼女はその変更に説得力のある論拠を示した。|a cogent argument
+compelling|説得力のある、抗しがたい|形|難語（態度・判断）|The evidence is compelling but not conclusive.|その証拠は説得力があるが決定的ではない。|a compelling reason
+discern|見分ける、識別する|動|難語（認識の動詞）|It is hard to discern a pattern in the data.|そのデータから規則性を見分けるのは難しい。|discern between
+scrutinize|精査する|動|難語（認識の動詞）|Every claim was scrutinized before publication.|どの主張も公表前に精査された。|closely scrutinize
+contemplate|じっくり考える、熟考する|動|難語（認識の動詞）|She contemplated the problem for a week.|彼女はその問題を1週間じっくり考えた。|contemplate doing
+grasp|把握する|動|難語（認識の動詞）|He grasped the argument at once.|彼はその議論をすぐに把握した。|grasp the point
+overlook|見落とす、大目に見る|動|難語（認識の動詞）|An obvious explanation was overlooked.|明白な説明が見落とされていた。|overlook a detail
+exacerbate|悪化させる|動|難語（因果・影響）|The delay only exacerbated the shortage.|遅れは不足を悪化させただけだった。|exacerbate a problem
+mitigate|和らげる|動|難語（因果・影響）|Planting trees mitigates the summer heat.|植樹は夏の暑さを和らげる。|mitigate the effects
+undermine|むしばむ、弱める|動|難語（因果・影響）|Repeated errors undermine the whole argument.|誤りの繰り返しが議論全体を弱める。|undermine confidence
+hinder|妨げる|動|難語（因果・影響）|Heavy rain hindered the survey.|大雨が調査を妨げた。|hinder progress
+foster|促進する、育てる|動|難語（因果・影響）|Small classes foster discussion.|少人数の授業は議論を促す。|foster growth
+outweigh|〜に勝る|動|難語（因果・影響）|The benefits outweigh the risks.|利点は危険を上回る。|far outweigh
+viable|実行可能な、存続できる|形|難語（実行・適合）|No viable alternative was offered.|実行可能な代案は示されなかった。|a viable option
+feasible|実現できる|形|難語（実行・適合）|The plan is feasible only with more staff.|その計画は人員を増やして初めて実現できる。|technically feasible
+paramount|最も重要な|形|難語（実行・適合）|Safety is paramount in this experiment.|この実験では安全が最も重要だ。|of paramount importance
+pertinent|適切な、関連する|形|難語（実行・適合）|She asked a pertinent question.|彼女は的を射た質問をした。|pertinent to
+subsequent|その後の|形|難語（実行・適合）|Subsequent studies confirmed the result.|その後の研究がその結果を裏づけた。|subsequent to
+succinct|簡潔な|形|難語（実行・適合）|The summary is succinct and complete.|その要約は簡潔で過不足がない。|a succinct account
+rugged|でこぼこの、頑丈な|形|難語（描写）|The coast here is rugged and almost roadless.|このあたりの海岸はでこぼこで道もほとんどない。|rugged terrain
+serene|穏やかな|形|難語（描写）|The lake was serene in the early morning.|早朝の湖は穏やかだった。|a serene expression
+barren|不毛の|形|難語（描写）|Nothing grows on the barren slope.|その不毛の斜面には何も育たない。|barren land
+poignant|胸に迫る|形|難語（描写）|The last scene is quietly poignant.|最後の場面は静かに胸に迫る。|a poignant reminder
+austere|質素な、厳しい|形|難語（描写）|He led an austere life by choice.|彼は自ら選んで質素な生活を送った。|an austere style
+intricate|入り組んだ|形|難語（描写）|The pattern is more intricate than it looks.|その模様は見た目より入り組んでいる。|an intricate structure
 conclude|結論づける、締めくくる|動|clud / clus（閉じる）|From this we conclude that the effect is real.|ここから効果は本物だと結論づける。|conclude that
 exclude|除外する|動|clud / clus（閉じる）|We cannot exclude the possibility of error.|誤りの可能性を排除できない。|exclude A from B
 inclusive|包括的な、含めて|形|clud / clus（閉じる）|The fee is inclusive of all materials.|料金には材料費がすべて含まれる。|inclusive of

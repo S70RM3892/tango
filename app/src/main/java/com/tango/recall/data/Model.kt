@@ -115,6 +115,43 @@ enum class NoteType(
             CardTemplate("ja_en_sentence", "例文の和訳 → 英訳を書く", listOf("exampleJa"), listOf("example"),
                 AnswerMode.SELF_CHECK,
                 requires = listOf("example", "exampleJa"), defaultEnabled = false),
+            // The exam puts unfamiliar words in front of you without a gloss, and what
+            // decides the mark is whether you can place one from its shape and its
+            // surroundings. This asks for exactly that, from material already here.
+            CardTemplate("guess", "文の中で意味を推測する", listOf("example", "word"),
+                listOf("meaning", "root"), AnswerMode.REVEAL,
+                requires = listOf("word", "example", "meaning"), defaultEnabled = false),
+        ),
+    ),
+
+    /**
+     * 接頭辞・接尾辞.
+     *
+     * A word met for the first time is not a blank: micro- says small, -ate says it is
+     * a verb, in- may say not. Together with the root this is most of a guess, and
+     * guessing is what the paper actually asks for — the hard words in it arrive
+     * without a gloss. So the affixes are learned as items in their own right, and each
+     * is tied to the words in the collection that carry it.
+     */
+    AFFIX(
+        id = "affix",
+        label = "接頭辞・接尾辞",
+        subject = Subject.ENGLISH,
+        fields = listOf(
+            FieldDef("affix", "接辞", "micro-"),
+            FieldDef("meaning", "意味", "小さい"),
+            FieldDef("kind", "種類", "接頭辞 / 接尾辞"),
+            FieldDef("effect", "語にどう効くか", "意味を「小さい側」に限定する。品詞は変えない", multiline = true),
+            FieldDef("examples", "この接辞を持つ語", "microbe（微生物）, microscope（顕微鏡）"),
+            FieldDef("memo", "メモ", "", multiline = true),
+        ),
+        templates = listOf(
+            CardTemplate("affix_meaning", "接辞 → 意味", listOf("affix"), listOf("meaning", "effect"),
+                AnswerMode.REVEAL, requires = listOf("affix", "meaning")),
+            CardTemplate("meaning_affix", "意味 → 接辞（入力）", listOf("meaning", "kind"), listOf("affix"),
+                AnswerMode.TYPE, requires = listOf("affix", "meaning")),
+            CardTemplate("affix_examples", "接辞 → その語例", listOf("affix"), listOf("examples"),
+                AnswerMode.REVEAL, requires = listOf("affix", "examples"), defaultEnabled = false),
         ),
     ),
 
@@ -533,6 +570,7 @@ enum class LinkType(
         fun forNoteType(type: NoteType): List<LinkType> = when (type) {
             NoteType.ENGLISH -> listOf(SAME_ROOT, SYNONYM, ANTONYM, DERIVED, CONFUSABLE, CONTRAST, RELATED)
             NoteType.IDIOM -> listOf(SAME_GROUP, SYNONYM, ANTONYM, CONFUSABLE, CONTRAST, RELATED)
+            NoteType.AFFIX -> listOf(SAME_GROUP, ANTONYM, CONFUSABLE, HYPERNYM, RELATED)
             NoteType.READING -> listOf(SAME_GROUP, CONTRAST, RELATED)
             NoteType.CHEM_SUBSTANCE -> listOf(REACTS_WITH, PRODUCES, SAME_GROUP, CONTRAST, CONFUSABLE, HYPERNYM, RELATED)
             NoteType.CHEM_REACTION -> listOf(PRODUCES, SAME_GROUP, CONTRAST, RELATED)
@@ -577,6 +615,7 @@ data class Note(
     fun title(): String = when (type) {
         NoteType.ENGLISH -> this["word"]
         NoteType.IDIOM -> this["phrase"]
+        NoteType.AFFIX -> this["affix"]
         NoteType.CHEM_SUBSTANCE -> this["name"]
         NoteType.CHEM_REACTION -> this["title"]
         NoteType.EISAKUBUN -> this["ja"]
@@ -592,6 +631,7 @@ data class Note(
     fun subtitle(): String = when (type) {
         NoteType.ENGLISH -> this["meaning"]
         NoteType.IDIOM -> this["meaning"]
+        NoteType.AFFIX -> this["meaning"]
         NoteType.CHEM_SUBSTANCE -> this["formula"]
         NoteType.CHEM_REACTION -> this["equation"]
         NoteType.EISAKUBUN -> this["en"]
