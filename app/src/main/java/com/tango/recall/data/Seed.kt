@@ -24,6 +24,7 @@ object Seed {
         "chemistry" to ::seedChemistry,
         "eisakubun" to ::seedEisakubun,
         "chem_calc" to ::seedChemCalc,
+        "wayaku" to ::seedWayaku,
     )
 
     /** What the starter content consisted of before it was split into packs. */
@@ -521,6 +522,88 @@ object Seed {
         s.link(combustion, mol, LinkType.RELATED, "係数比から物質量を出す流れは共通")
     }
 
+    // ---- 英文和訳 -------------------------------------------------------------
+
+    /**
+     * Translating a marked passage into Japanese.
+     *
+     * Every sentence here turns on a structure rather than on vocabulary — the
+     * concessive, the inversion, the double negative — because that is what the marker
+     * is looking at, and it is what the checklist makes explicit.
+     */
+    private fun seedWayaku(s: Seeder) {
+        val deckId = s.deck(
+            name = WAYAKU_DECK,
+            type = NoteType.WAYAKU,
+            templates = setOf("en_ja_write"),
+            newPerDay = 3,
+        )
+
+        fun passage(en: String, ja: String, structures: String, traps: String, tag: String) = s.note(
+            deckId, NoteType.WAYAKU,
+            mapOf("en" to en, "ja" to ja, "structures" to structures, "traps" to traps, "memo" to ""),
+            listOf("英文和訳", tag),
+        )
+
+        val notThat = passage(
+            "It is not that he cannot do the work, but that he will not.",
+            "彼にその仕事ができないのではなく、やろうとしないのだ。",
+            "It is not that A but that B を「AではなくBなのだ」と訳し分ける\n" +
+                "will に「意志」の意味を持たせて「やろうとしない」と訳す",
+            "will not を単純未来（〜しないだろう）で訳さない。",
+            "構文",
+        )
+        val doubleNegative = passage(
+            "No one is so old that he cannot learn something new.",
+            "何か新しいことを学べないほど年をとっている人はいない。",
+            "so … that ~ not を「〜ないほど…」と後ろから訳す\n" +
+                "No one … cannot の二重否定を、そのまま訳すか「誰でも学べる」と開くか決める",
+            "否定が二重にかかっている。訳したあとに肯定文に開いて意味を検算する。",
+            "否定",
+        )
+        val concession = passage(
+            "What he says sounds reasonable enough, but it does not stand up to close examination.",
+            "彼の言うことは一応もっともらしく聞こえるが、詳しく検討すると成り立たない。",
+            "形容詞 + enough の「一応〜ではある」という譲歩の含みを訳に出す\n" +
+                "stand up to を「〜に耐える」と処理する\n" +
+                "What he says を「彼の言うこと」と名詞節のまま出す",
+            "reasonable enough を「十分に合理的だ」と訳すと、後半の but と噛み合わなくなる。",
+            "語義",
+        )
+        val comparison = passage(
+            "The discovery of the new drug owes less to a flash of genius than to years of patient failure.",
+            "その新薬の発見は、天才のひらめきによるものというより、何年もの辛抱強い失敗によるところが大きい。",
+            "owe A to B「A は B のおかげである」を土台に置く\n" +
+                "less … than ~ は「…というより〜」で、重いのは than の後ろ\n" +
+                "無生物主語を「〜によるところが大きい」と日本語の主述に組み替える",
+            "less A than B の軽重を逆にしない。強調されるのは B のほう。",
+            "比較",
+        )
+        val inversion = passage(
+            "Not until he had lost his health did he realize how much it had meant to him.",
+            "健康を失って初めて、それが自分にとってどれほど大切だったかを悟った。",
+            "Not until … + 倒置 を「…して初めて〜した」と訳す\n" +
+                "過去完了を「失ってから悟った」の前後関係として出す\n" +
+                "how much it had meant to him を「どれほど大切だったか」と意訳する",
+            "倒置の did を訳に出さない。文頭の否定語に引きずられて全体を否定で訳さない。",
+            "構文",
+        )
+        val insertion = passage(
+            "Science, far from being a mere collection of facts, is a way of asking questions.",
+            "科学は、単なる事実の寄せ集めどころか、問いの立て方そのものである。",
+            "far from -ing を「〜どころか」と訳す\n" +
+                "挿入句をいったん外し、Science is a way of asking questions の骨格を先に取る\n" +
+                "a way of asking questions を「問いの立て方」と名詞化する",
+            "far from を「〜から遠い」と直訳しない。挿入句を主語の修飾として訳し込まない。",
+            "構文",
+        )
+
+        s.link(notThat, inversion, LinkType.SAME_GROUP, "どちらも「構文の形をそのまま訳の形にする」型")
+        s.link(doubleNegative, concession, LinkType.CONTRAST, "否定を開いて訳す / 含みを足して訳す")
+        s.link(comparison, doubleNegative, LinkType.CONFUSABLE, "so…that not と less…than。どちらも軽重を取り違えやすい")
+        s.link(insertion, concession, LinkType.SAME_GROUP, "骨格をいったん取り出してから修飾を戻す")
+    }
+
     // ---- deck names, shared by the packs that add to them --------------------
 
     internal const val ENGLISH_DECK = "英単語（語源でつなぐ）"
@@ -528,6 +611,7 @@ object Seed {
     internal const val REACTION_DECK = "化学・工業的製法と反応"
     internal const val EISAKUBUN_DECK = "和文英訳（直訳できない日本語）"
     internal const val CALC_DECK = "化学・計算"
+    internal const val WAYAKU_DECK = "英文和訳（構文で取る）"
 }
 
 /**

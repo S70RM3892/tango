@@ -1,0 +1,14 @@
+<!-- A stack of cards: the status bar wants a flat white silhouette, nothing more. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="#FFFFFFFF">
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M7,3h12a2,2 0 0,1 2,2v12a2,2 0 0,1 -2,2H7a2,2 0 0,1 -2,-2V5a2,2 0 0,1 2,-2z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3,7v12a2,2 0 0,0 2,2h12v-2H5V7z" />
+</vector>

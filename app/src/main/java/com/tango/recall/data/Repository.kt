@@ -65,6 +65,11 @@ data class ExamOutlook(
 
 data class ConfusionPair(val a: Note, val b: Note, val times: Int, val linked: Boolean)
 
+/** A card that keeps being answered wrong, with how often it has been missed. */
+data class Leech(val note: Note, val card: Card, val misses: Int) {
+    val label: String get() = cardLabel(note, card.templateId)
+}
+
 data class Stats(
     val totalNotes: Int,
     val totalCards: Int,
@@ -74,7 +79,6 @@ data class Stats(
     val dueNext7Days: List<Int>,
     val matureCards: Int,
     val averageStability: Double,
-    val hardest: List<Pair<Note, Int>>,
 )
 
 /** Hour at which a new "study day" starts, so late-night sessions count as yesterday. */
@@ -121,6 +125,19 @@ class Repository(private val helper: TangoDb) {
     var maxReviewsPerDay: Int
         get() = setting(KEY_MAX_REVIEWS, "200").toIntOrNull() ?: 200
         set(value) = putSetting(KEY_MAX_REVIEWS, value.coerceIn(10, 9999).toString())
+
+    /** Whether the daily reminder is armed, and when it goes off. */
+    var reminderEnabled: Boolean
+        get() = setting(KEY_REMINDER, "false").toBoolean()
+        set(value) = putSetting(KEY_REMINDER, value.toString())
+
+    var reminderHour: Int
+        get() = setting(KEY_REMINDER_HOUR, "20").toIntOrNull()?.coerceIn(0, 23) ?: 20
+        set(value) = putSetting(KEY_REMINDER_HOUR, value.coerceIn(0, 23).toString())
+
+    var reminderMinute: Int
+        get() = setting(KEY_REMINDER_MINUTE, "0").toIntOrNull()?.coerceIn(0, 59) ?: 0
+        set(value) = putSetting(KEY_REMINDER_MINUTE, value.coerceIn(0, 59).toString())
 
     /** Epoch millis of the exam being prepared for, or 0 when none is set. */
     var examDate: Long
@@ -649,13 +666,6 @@ class Repository(private val helper: TangoDb) {
             "SELECT AVG(stability) FROM cards WHERE phase='REVIEW'", null,
         ).use { if (it.moveToFirst() && !it.isNull(0)) it.getDouble(0) else 0.0 }
 
-        val hardestIds = db.rawQuery(
-            "SELECT noteId, SUM(lapses) AS l FROM cards GROUP BY noteId HAVING l>0 ORDER BY l DESC LIMIT 10",
-            null,
-        ).mapAll { it.getLong(0) to it.getInt(1) }
-        val hardestNotes = notes(hardestIds.map { it.first })
-        val hardest = hardestIds.mapNotNull { (id, l) -> hardestNotes[id]?.let { it to l } }
-
         return Stats(
             totalNotes = scalarInt("SELECT COUNT(*) FROM notes"),
             totalCards = scalarInt("SELECT COUNT(*) FROM cards"),
@@ -665,7 +675,6 @@ class Repository(private val helper: TangoDb) {
             dueNext7Days = forecast,
             matureCards = scalarInt("SELECT COUNT(*) FROM cards WHERE phase='REVIEW' AND stability>=21"),
             averageStability = avgStability,
-            hardest = hardest,
         )
     }
 
@@ -824,6 +833,42 @@ class Repository(private val helper: TangoDb) {
         return spaceSiblings(cards).map { it.id }
     }
 
+    // ---- cards that keep being missed ---------------------------------------
+
+    /**
+     * How often each card has been answered "もう一度", for the cards that keep
+     * coming back wrong.
+     *
+     * Counted from the review log rather than from the card's lapse counter, because
+     * a card can be failed over and over while still in learning without the lapse
+     * counter ever moving.
+     */
+    fun missCounts(minimum: Int = LEECH_MISSES): Map<Long, Int> =
+        // The threshold is written into the SQL rather than bound: COUNT(*) has no
+        // column affinity, so SQLite would compare it against a bound string and never
+        // match. It is an Int, so there is nothing to quote.
+        db.rawQuery(
+            "SELECT cardId, COUNT(*) AS n FROM reviews WHERE rating=1 GROUP BY cardId " +
+                "HAVING n>=${minimum.coerceAtLeast(1)}",
+            null,
+        ).mapAll { it.getLong(0) to it.getInt(1) }.toMap()
+
+    /**
+     * The cards to do something about: re-word them, split them, or tie them to
+     * something already known. Worst first.
+     */
+    fun leeches(limit: Int = 10, minimum: Int = LEECH_MISSES): List<Leech> {
+        val counts = missCounts(minimum).entries.sortedByDescending { it.value }.take(limit)
+        if (counts.isEmpty()) return emptyList()
+        val cards = counts.mapNotNull { card(it.key) }
+        val notes = notes(cards.map { it.noteId })
+        return counts.mapNotNull { (cardId, misses) ->
+            val card = cards.firstOrNull { it.id == cardId } ?: return@mapNotNull null
+            val note = notes[card.noteId] ?: return@mapNotNull null
+            Leech(note, card, misses)
+        }
+    }
+
     // ---- confusions ---------------------------------------------------------
 
     /**
@@ -910,11 +955,22 @@ class Repository(private val helper: TangoDb) {
         const val KEY_EXAM_DATE = "exam_date"
         const val KEY_SHORTLIST = "shortlist"
         const val KEY_SEED_PACKS = "seed_packs"
+        const val KEY_REMINDER = "reminder_enabled"
+        const val KEY_REMINDER_HOUR = "reminder_hour"
+        const val KEY_REMINDER_MINUTE = "reminder_minute"
 
         /** How close the target is pushed as the exam arrives. */
         const val EXAM_PEAK_RETENTION = 0.97
 
         /** Days before the exam over which the target ramps up. */
         const val RAMP_DAYS = 60
+
+        /**
+         * Wrong answers before a card counts as one you keep stumbling over.
+         *
+         * Low enough to catch it while it still matters, high enough that an ordinary
+         * difficult word does not qualify.
+         */
+        const val LEECH_MISSES = 5
     }
 }

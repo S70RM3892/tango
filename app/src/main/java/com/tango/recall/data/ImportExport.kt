@@ -103,6 +103,9 @@ object ImportExport {
             .put(Repository.KEY_SHOW_RELATED, repo.showRelated)
             .put(Repository.KEY_MAX_REVIEWS, repo.maxReviewsPerDay)
             .put(Repository.KEY_EXAM_DATE, repo.examDate)
+            .put(Repository.KEY_REMINDER, repo.reminderEnabled)
+            .put(Repository.KEY_REMINDER_HOUR, repo.reminderHour)
+            .put(Repository.KEY_REMINDER_MINUTE, repo.reminderMinute)
             .put(Repository.KEY_SHORTLIST, JSONArray(repo.shortlist.toList()))
 
         root.put("decks", decks)
@@ -224,6 +227,9 @@ object ImportExport {
                 repo.showRelated = s.optBoolean(Repository.KEY_SHOW_RELATED, true)
                 repo.maxReviewsPerDay = s.optInt(Repository.KEY_MAX_REVIEWS, 200)
                 repo.examDate = s.optLong(Repository.KEY_EXAM_DATE, 0L)
+                repo.reminderEnabled = s.optBoolean(Repository.KEY_REMINDER, false)
+                repo.reminderHour = s.optInt(Repository.KEY_REMINDER_HOUR, 20)
+                repo.reminderMinute = s.optInt(Repository.KEY_REMINDER_MINUTE, 0)
                 repo.shortlist = s.optJSONArray(Repository.KEY_SHORTLIST)?.let { a ->
                     buildSet { for (j in 0 until a.length()) add(a.getString(j)) }
                 } ?: emptySet()

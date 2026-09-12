@@ -156,6 +156,10 @@ private fun CardPane(session: ReviewSession, vm: AppViewModel, onPeek: (Note) ->
             if (session.revealed) {
                 Spacer(Modifier.height(20.dp))
                 session.grade?.let { GradeBanner(it.grade, it.comment) }
+                session.stumbles[card.card.id]?.let {
+                    Spacer(Modifier.height(12.dp))
+                    StumbleHint(it)
+                }
                 session.confusion?.let {
                     Spacer(Modifier.height(12.dp))
                     ConfusionBlock(it, vm)
@@ -273,6 +277,32 @@ private fun ChecklistBlock(card: RenderedCard, session: ReviewSession, vm: AppVi
                 Checkbox(checked = index in session.checked, onCheckedChange = { vm.toggleCheck(index) })
                 Text(item, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             }
+        }
+    }
+}
+
+/**
+ * Said only after the answer is shown, so it never colours the attempt itself.
+ *
+ * Repeating a card that keeps failing mostly buys more failures; what helps is
+ * changing its shape — tying it to something already known, splitting the question,
+ * or setting it aside for now.
+ */
+@Composable
+private fun StumbleHint(misses: Int) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(12.dp)) {
+            Text("このカードは ${misses} 回落としています", style = MaterialTheme.typography.titleSmall)
+            Text(
+                "回数を重ねても抜けにくいところです。関係を1つ足す、欄を分けて問いを小さくする、" +
+                    "いったん保留にする — どれかに切り替えたほうが早く済みます。",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

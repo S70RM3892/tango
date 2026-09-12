@@ -171,6 +171,17 @@ fun blankOut(sentence: String, target: String): String {
     else "$sentence\n（$CLOZE_BLANK）"
 }
 
+/**
+ * The name of the direction a card asks in.
+ *
+ * Cards generated from the relation graph have no template on the note type, so they
+ * are named from the relation instead.
+ */
+fun cardLabel(note: Note, templateId: String): String =
+    RelationCards.parse(templateId)?.let { (type, reverse) -> "つながり: " + RelationCards.label(type, reverse) }
+        ?: note.type.template(templateId)?.label
+        ?: templateId
+
 enum class Grade { CORRECT, CLOSE, WRONG }
 
 data class GradeResult(

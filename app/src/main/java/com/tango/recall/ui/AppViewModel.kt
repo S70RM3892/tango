@@ -19,6 +19,7 @@ import com.tango.recall.data.GradeResult
 import com.tango.recall.data.GraphData
 import com.tango.recall.data.ImportExport
 import com.tango.recall.data.ImportResult
+import com.tango.recall.data.Leech
 import com.tango.recall.data.LinkType
 import com.tango.recall.data.Note
 import com.tango.recall.data.NoteType
@@ -32,6 +33,7 @@ import com.tango.recall.data.Universities
 import com.tango.recall.data.gradeNumeric
 import com.tango.recall.data.gradeSelfCheck
 import com.tango.recall.data.gradeTyped
+import com.tango.recall.notify.Reminders
 import com.tango.recall.srs.Rating
 import com.tango.recall.ui.screens.JapanMap
 import com.tango.recall.ui.screens.JapanMapLoader
@@ -70,6 +72,8 @@ data class ReviewSession(
     val confusion: ConfusionHit? = null,
     val examMode: Boolean = false,
     val previews: Map<Rating, Long> = emptyMap(),
+    /** Cards in this session that keep being answered wrong, and how often. */
+    val stumbles: Map<Long, Int> = emptyMap(),
     val answered: Int = 0,
     val correct: Int = 0,
     val shownAt: Long = System.currentTimeMillis(),
@@ -97,6 +101,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     init {
         viewModelScope.launch {
             io { Seed.populate(repo) }
+            // Alarms are dropped on reboot and on app update; putting them back at
+            // launch covers the update case without waiting for the next boot.
+            io { Reminders.applyFromSettings(getApplication(), repo) }
             refresh()
         }
     }
@@ -125,6 +132,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun setShowRelated(v: Boolean) = viewModelScope.launch { io { repo.showRelated = v }; refresh() }
 
     fun setMaxReviews(v: Int) = viewModelScope.launch { io { repo.maxReviewsPerDay = v }; refresh() }
+
+    // ---- the daily reminder --------------------------------------------------
+
+    val reminderEnabled: Boolean get() = repo.reminderEnabled
+    val reminderHour: Int get() = repo.reminderHour
+    val reminderMinute: Int get() = repo.reminderMinute
+
+    fun setReminder(enabled: Boolean, hour: Int = repo.reminderHour, minute: Int = repo.reminderMinute) =
+        viewModelScope.launch {
+            io {
+                repo.reminderEnabled = enabled
+                repo.reminderHour = hour
+                repo.reminderMinute = minute
+                Reminders.applyFromSettings(getApplication(), repo)
+            }
+            toast = if (enabled) {
+                "毎日 %02d:%02d に通知します".format(hour, minute)
+            } else {
+                "通知を止めました"
+            }
+            refresh()
+        }
 
     // ---- decks --------------------------------------------------------------
 
@@ -182,8 +211,12 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             else -> "すべてのデッキ"
         }
         val queue = if (exam) io { repo.buildExamQueue() } else io { repo.buildQueue(deckId) }
+        // Worked out once for the whole session rather than per card.
+        val stumbles = io { repo.missCounts() }
         forgetUndo()
-        session = ReviewSession(deckId = deckId, deckName = name, queue = queue, examMode = exam)
+        session = ReviewSession(
+            deckId = deckId, deckName = name, queue = queue, examMode = exam, stumbles = stumbles,
+        )
         advance(0)
         busy = false
     }
@@ -453,6 +486,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun confusionPairs(): List<ConfusionPair> = io { repo.confusionPairs() }
+
+    /** Cards answered wrong over and over — worth changing the approach to. */
+    suspend fun leeches(): List<Leech> = io { repo.leeches() }
+
+    fun suspendCard(cardId: Long, onDone: () -> Unit = {}) = viewModelScope.launch {
+        io { repo.setSuspended(cardId, true) }
+        toast = "このカードを保留しました"
+        refresh()
+        onDone()
+    }
 
     // ---- the university database --------------------------------------------
 

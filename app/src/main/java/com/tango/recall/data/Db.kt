@@ -109,6 +109,7 @@ class TangoDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VE
         db.execSQL("CREATE INDEX idx_links_from ON links(fromNoteId)")
         db.execSQL("CREATE INDEX idx_links_to ON links(toNoteId)")
         db.execSQL("CREATE INDEX idx_reviews_ts ON reviews(ts)")
+        db.execSQL(INDEX_REVIEWS_CARD)
         db.execSQL(INDEX_CONFUSIONS)
     }
 
@@ -132,6 +133,11 @@ class TangoDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VE
             db.execSQL("ALTER TABLE cards ADD COLUMN autoSuspended INTEGER NOT NULL DEFAULT 0")
             backfillSearch(db)
         }
+        if (oldVersion < 5) {
+            // The review log is now read per card — for the cards that keep being
+            // missed, and to find the review that undo has to remove.
+            db.execSQL(INDEX_REVIEWS_CARD)
+        }
     }
 
     /** Fill the new search column for notes written by an earlier version. */
@@ -151,7 +157,7 @@ class TangoDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VE
 
     companion object {
         const val DB_NAME = "tango.db"
-        const val DB_VERSION = 4
+        const val DB_VERSION = 5
 
         /** Every time one note's answer was written where another note's was wanted. */
         private const val CREATE_CONFUSIONS = """
@@ -167,6 +173,8 @@ class TangoDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VE
 
         private const val INDEX_CONFUSIONS =
             "CREATE INDEX idx_confusions_pair ON confusions(noteId, otherNoteId)"
+
+        private const val INDEX_REVIEWS_CARD = "CREATE INDEX idx_reviews_card ON reviews(cardId)"
     }
 }
 

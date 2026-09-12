@@ -172,6 +172,45 @@ enum class NoteType(
         ),
     ),
 
+    /**
+     * Translation into Japanese.
+     *
+     * The English paper at Kyoto University is built around translating a marked
+     * passage, and what decides the mark is whether the structure was taken correctly
+     * — the concessive, the inversion, the comparison — not whether every word was
+     * looked up. So the note keeps those points as an explicit checklist, and the
+     * answer is self-graded against them, exactly as with translation into English.
+     */
+    WAYAKU(
+        id = "wayaku",
+        label = "英文和訳",
+        fields = listOf(
+            FieldDef(
+                "en", "英文（下線部）",
+                "It is not that he cannot do the work, but that he will not.",
+                multiline = true,
+            ),
+            FieldDef("ja", "模範訳", "彼にその仕事ができないのではなく、やろうとしないのだ。", multiline = true),
+            FieldDef(
+                "structures", "押さえる点（1行に1つ）",
+                "It is not that A but that B を「AではなくBなのだ」と訳し分ける\nwill の「意志」を訳に出す",
+                multiline = true,
+            ),
+            FieldDef("traps", "取りにくい構文・語義", "will not を単純未来として訳さない", multiline = true),
+            FieldDef("memo", "メモ", "", multiline = true),
+        ),
+        templates = listOf(
+            CardTemplate(
+                "en_ja_write", "英文和訳を書く", listOf("en"), listOf("ja", "traps"), AnswerMode.SELF_CHECK,
+                requires = listOf("en", "ja"), checklistField = "structures",
+            ),
+            CardTemplate(
+                "structure_only", "構文の取り方だけ確認", listOf("en"), listOf("traps", "structures"),
+                AnswerMode.REVEAL, requires = listOf("en", "traps"), defaultEnabled = false,
+            ),
+        ),
+    ),
+
     /** A chemistry problem with a numeric answer, graded within a tolerance. */
     CHEM_CALC(
         id = "chem_calc",
@@ -255,6 +294,7 @@ enum class LinkType(
             NoteType.CHEM_SUBSTANCE -> listOf(REACTS_WITH, PRODUCES, SAME_GROUP, CONTRAST, CONFUSABLE, HYPERNYM, RELATED)
             NoteType.CHEM_REACTION -> listOf(PRODUCES, SAME_GROUP, CONTRAST, RELATED)
             NoteType.EISAKUBUN -> listOf(SAME_GROUP, CONTRAST, CONFUSABLE, RELATED)
+            NoteType.WAYAKU -> listOf(SAME_GROUP, CONTRAST, CONFUSABLE, RELATED)
             NoteType.CHEM_CALC -> listOf(SAME_GROUP, CONTRAST, RELATED)
             NoteType.BASIC -> entries
         }
@@ -293,6 +333,7 @@ data class Note(
         NoteType.CHEM_SUBSTANCE -> this["name"]
         NoteType.CHEM_REACTION -> this["title"]
         NoteType.EISAKUBUN -> this["ja"]
+        NoteType.WAYAKU -> this["en"]
         NoteType.CHEM_CALC -> this["question"]
         NoteType.BASIC -> this["front"]
     }.ifBlank { type.fields.firstNotNullOfOrNull { fields[it.id]?.ifBlank { null } } ?: "(空)" }
@@ -302,6 +343,7 @@ data class Note(
         NoteType.CHEM_SUBSTANCE -> this["formula"]
         NoteType.CHEM_REACTION -> this["equation"]
         NoteType.EISAKUBUN -> this["en"]
+        NoteType.WAYAKU -> this["ja"]
         NoteType.CHEM_CALC -> listOf(this["answer"], this["unit"]).filter { it.isNotBlank() }.joinToString(" ")
         NoteType.BASIC -> this["back"]
     }

@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -29,7 +31,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
+import com.tango.recall.Routes
 import com.tango.recall.data.ConfusionPair
+import com.tango.recall.data.Leech
 import com.tango.recall.data.Note
 import com.tango.recall.ui.AppViewModel
 import kotlin.math.roundToInt
@@ -38,10 +42,13 @@ import kotlin.math.roundToInt
 fun StatsScreen(vm: AppViewModel, nav: NavController) {
     var weakest by remember { mutableStateOf<List<Pair<Note, Double>>>(emptyList()) }
     var confusions by remember { mutableStateOf<List<ConfusionPair>>(emptyList()) }
-    LaunchedEffect(Unit) {
+    var leeches by remember { mutableStateOf<List<Leech>>(emptyList()) }
+    var reload by remember { mutableStateOf(0) }
+    LaunchedEffect(reload) {
         vm.loadStats()
         weakest = vm.weakest()
         confusions = vm.confusionPairs()
+        leeches = vm.leeches()
     }
     val stats = vm.stats
 
@@ -165,34 +172,47 @@ fun StatsScreen(vm: AppViewModel, nav: NavController) {
                 }
             }
 
-            if (stats.hardest.isNotEmpty()) {
+            if (leeches.isNotEmpty()) {
                 item {
-                    SectionTitle("何度も間違えているもの")
+                    SectionTitle("つまずき続けているカード")
                     Spacer(Modifier.height(4.dp))
                     Text(
-                        "繰り返し忘れる項目は、覚え方そのものを変えたほうが早いことが多いです。" +
-                            "語源や対になる語と結び付けてみてください。",
+                        "同じカードを何度も落としているときは、回数を重ねても抜けません。" +
+                            "覚え方そのものを変えるほうが早いです — 語源や対になるものと結ぶ、" +
+                            "欄を分けて問いを小さくする、いったん保留にして後から戻す。",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
-                items(stats.hardest, key = { it.first.id }) { (note, lapses) ->
+                items(leeches, key = { it.card.id }) { leech ->
                     SectionCard {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text(note.title(), style = MaterialTheme.typography.titleMedium)
+                                Text(leech.note.title(), style = MaterialTheme.typography.titleMedium)
                                 Text(
-                                    note.subtitle(),
+                                    leech.label,
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
                                 )
                             }
                             Pill(
-                                "$lapses 回",
+                                "もう一度 ${leech.misses} 回",
                                 MaterialTheme.colorScheme.errorContainer,
                                 MaterialTheme.colorScheme.onErrorContainer,
                             )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FilledTonalButton(
+                                onClick = { nav.navigate(Routes.note(leech.note.id, leech.note.deckId)) },
+                                modifier = Modifier.weight(1f),
+                            ) { Text("ノートを直す") }
+                            OutlinedButton(
+                                onClick = { vm.suspendCard(leech.card.id) { reload++ } },
+                                enabled = !leech.card.suspended,
+                                modifier = Modifier.weight(1f),
+                            ) { Text(if (leech.card.suspended) "保留中" else "保留する") }
                         }
                     }
                 }

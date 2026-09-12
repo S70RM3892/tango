@@ -24,7 +24,9 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TimePicker
 import androidx.compose.material3.rememberDatePickerState
+import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.material3.AlertDialog
 import androidx.navigation.NavController
 import com.tango.recall.ui.AppViewModel
 import java.text.SimpleDateFormat
@@ -48,7 +51,27 @@ fun SettingsScreen(vm: AppViewModel, nav: NavController) {
     var maxReviews by remember { mutableStateOf(vm.maxReviewsPerDay.toFloat()) }
     var showRelated by remember { mutableStateOf(vm.showRelated) }
     var pickingDate by remember { mutableStateOf(false) }
+    var pickingTime by remember { mutableStateOf(false) }
+    var reminder by remember { mutableStateOf(vm.reminderEnabled) }
     val snackbar = remember { SnackbarHostState() }
+
+    // Android 13 and later will not show a notification until it has been allowed.
+    val askNotifications = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        reminder = granted
+        vm.setReminder(granted)
+        if (!granted) vm.toast = "通知が許可されていないため、リマインダーは鳴りません"
+    }
+
+    fun enableReminder() {
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            askNotifications.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            reminder = true
+            vm.setReminder(true)
+        }
+    }
 
     LaunchedEffect(Unit) { vm.loadExamOutlook() }
     LaunchedEffect(vm.toast) { vm.toast?.let { snackbar.showSnackbar(it); vm.toast = null } }
@@ -103,6 +126,36 @@ fun SettingsScreen(vm: AppViewModel, nav: NavController) {
                         onClick = { vm.setExamDate(0L) },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text("試験日を解除") }
+                }
+            }
+
+            SectionCard {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SectionTitle("毎日の通知")
+                    Switch(
+                        checked = reminder,
+                        onCheckedChange = { on ->
+                            if (on) enableReminder() else { reminder = false; vm.setReminder(false) }
+                        },
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    "決めた時刻に、その日に残っている枚数を知らせます。" +
+                        "残っていない日は鳴りません（鳴らない日があるほうが、通知は効きます）。",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (reminder) {
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedButton(
+                        onClick = { pickingTime = true },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("通知する時刻：%02d:%02d".format(vm.reminderHour, vm.reminderMinute)) }
                 }
             }
 
@@ -195,6 +248,34 @@ fun SettingsScreen(vm: AppViewModel, nav: NavController) {
             onPick = { picked -> pickingDate = false; vm.setExamDate(picked) },
         )
     }
+
+    if (pickingTime) {
+        ReminderTimePicker(
+            hour = vm.reminderHour,
+            minute = vm.reminderMinute,
+            onDismiss = { pickingTime = false },
+            onPick = { h, m -> pickingTime = false; vm.setReminder(true, h, m) },
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReminderTimePicker(
+    hour: Int,
+    minute: Int,
+    onDismiss: () -> Unit,
+    onPick: (Int, Int) -> Unit,
+) {
+    val state = rememberTimePickerState(initialHour = hour, initialMinute = minute, is24Hour = true)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = { onPick(state.hour, state.minute) }) { Text("決定") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("やめる") } },
+        text = { TimePicker(state) },
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
