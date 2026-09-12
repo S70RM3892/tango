@@ -74,8 +74,12 @@ fun ReviewScreen(
     deckId: Long?,
     exam: Boolean = false,
     noteId: Long? = null,
+    /** True when the caller has already built the session (the word shelf does). */
+    resume: Boolean = false,
 ) {
-    LaunchedEffect(deckId, exam, noteId) { vm.startReview(deckId, exam, noteId) }
+    LaunchedEffect(deckId, exam, noteId, resume) {
+        if (!resume) vm.startReview(deckId, exam, noteId)
+    }
     val session = vm.session
     var peek by remember { mutableStateOf<Note?>(null) }
 

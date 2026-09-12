@@ -35,16 +35,50 @@ data class GraphNode(
     val memory: List<CardMemory> = emptyList(),
 ) {
     /** Mean predicted recall of this note's cards at [at]. */
-    fun strengthAt(at: Long): Double {
-        if (memory.isEmpty()) return 0.0
-        return memory.map { card ->
-            val last = card.lastReview ?: return@map 0.0
-            Fsrs.recallAfter((at - last).toDouble() / 86_400_000.0, card.stability)
-        }.average()
-    }
+    fun strengthAt(at: Long): Double = meanRecall(memory, at)
 }
 
 data class GraphEdge(val from: Long, val to: Long, val typeId: String, val label: String)
+
+/**
+ * One word on the shelf, with enough memory state to be drawn at any date.
+ */
+data class WordCell(
+    val noteId: Long,
+    val deckId: Long,
+    val word: String,
+    val meaning: String,
+    val memory: List<CardMemory>,
+) {
+    val isNew: Boolean get() = memory.isEmpty()
+
+    fun strengthAt(at: Long): Double = meanRecall(memory, at)
+}
+
+/**
+ * The words that share one root, and how well they are held.
+ *
+ * The root is the unit the words were learned in, so it is also the unit worth
+ * reviewing and the unit worth measuring: a root where four of five words have faded
+ * is a different problem from five roots with one weak word each.
+ */
+data class RootShelf(val root: String, val words: List<WordCell>) {
+    val studied: List<WordCell> get() = words.filterNot { it.isNew }
+    val newCount: Int get() = words.count { it.isNew }
+
+    /** Mean predicted recall over the words actually studied, or null if none are. */
+    fun meanAt(at: Long): Double? =
+        studied.takeIf { it.isNotEmpty() }?.map { it.strengthAt(at) }?.average()
+}
+
+/** Mean predicted recall of a set of cards at [at]. A card never seen counts as 0. */
+internal fun meanRecall(memory: List<CardMemory>, at: Long): Double {
+    if (memory.isEmpty()) return 0.0
+    return memory.map { card ->
+        val last = card.lastReview ?: return@map 0.0
+        Fsrs.recallAfter((at - last).toDouble() / 86_400_000.0, card.stability)
+    }.average()
+}
 
 data class GraphData(val nodes: List<GraphNode>, val edges: List<GraphEdge>)
 
@@ -906,6 +940,54 @@ class Repository(private val helper: TangoDb) {
             Leech(note, card, misses)
         }
     }
+
+    // ---- the word shelf ------------------------------------------------------
+
+    /**
+     * Every word, grouped by root, weakest group first.
+     *
+     * Words do not lay out as a map. Seventy-odd roots are seventy-odd little cliques
+     * with almost nothing joining them, and a force layout of disconnected cliques is a
+     * field of blobs — no shape to learn, no place to remember. What a vocabulary
+     * actually varies along is one dimension, how well each word is held, so the shelf
+     * sorts by exactly that and keeps the root as the row.
+     *
+     * Groups with nothing studied yet go last: they are not weak, they are simply not
+     * started, and mixing the two would bury the words that are actually slipping.
+     */
+    fun wordShelf(now: Long = System.currentTimeMillis(), limit: Int = 2000): List<RootShelf> {
+        val notes = listNotes(null, "", limit, Subject.ENGLISH)
+            .filter { it.type == NoteType.ENGLISH }
+        if (notes.isEmpty()) return emptyList()
+        val cards = cardsOfNotes(notes.map { it.id })
+
+        val cells = notes.map { note ->
+            val seen = cards[note.id].orEmpty().filter { it.srs.phase != CardPhase.NEW }
+            note["root"].trim().ifBlank { "語根なし" } to WordCell(
+                noteId = note.id,
+                deckId = note.deckId,
+                word = note["word"].ifBlank { note.title() },
+                meaning = note["meaning"],
+                memory = seen.map { CardMemory(it.srs.stability, it.srs.lastReview) },
+            )
+        }
+
+        return cells.groupBy({ it.first }, { it.second })
+            .map { (root, words) -> RootShelf(root, words.sortedBy { it.word }) }
+            .sortedWith(
+                compareBy(
+                    { it.meanAt(now) == null },
+                    { it.meanAt(now) ?: 0.0 },
+                    { it.root },
+                )
+            )
+    }
+
+    /** The cards of a whole root group, for studying it in one go. */
+    fun queueForNotes(noteIds: List<Long>): List<Long> =
+        spaceSiblingsById(
+            cardsOfNotes(noteIds).values.flatten().filterNot { it.suspended }.map { it.id }
+        )
 
     // ---- confusions ---------------------------------------------------------
 

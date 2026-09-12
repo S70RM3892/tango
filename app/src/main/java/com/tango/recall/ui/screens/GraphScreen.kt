@@ -216,6 +216,27 @@ fun GraphScreen(vm: AppViewModel, nav: NavController, initialDeckId: Long?) {
                 }
             }
 
+            // The map is the wrong shape for vocabulary and says so, rather than
+            // leaving the learner to wonder why English looks like a field of blobs.
+            if (subject == Subject.ENGLISH) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    shape = RoundedCornerShape(12.dp),
+                    onClick = { nav.navigate(Routes.WORDS) },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                ) {
+                    Column(Modifier.padding(12.dp)) {
+                        Text("英単語は「棚」のほうが読めます", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "語根ごとの塊が並ぶだけで地図には形が出ません。" +
+                                "棚では語根を弱い順に並べ、そのまま学習に入れます。",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+
             val decksShown = vm.decks.filter { subject == null || it.noteType.subject == subject }
 
             Row(

@@ -26,6 +26,7 @@ import com.tango.recall.data.NoteType
 import com.tango.recall.data.RelatedNote
 import com.tango.recall.data.RenderedCard
 import com.tango.recall.data.Repository
+import com.tango.recall.data.RootShelf
 import com.tango.recall.data.Seed
 import com.tango.recall.data.Stats
 import com.tango.recall.data.Subject
@@ -483,6 +484,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val present = repo.listDecks().map { it.noteType.subject }.toSet()
         Subject.entries.filter { it in present }
     }
+
+    // ---- the word shelf ------------------------------------------------------
+
+    suspend fun wordShelf(): List<RootShelf> = io { repo.wordShelf() }
+
+    /**
+     * Study one group of words on its own, whatever their due dates.
+     *
+     * The daily queue decides what is due; this is for when the learner has looked at
+     * the shelf and decided that this root is the weak spot.
+     */
+    fun startGroupReview(name: String, noteIds: List<Long>, onReady: () -> Unit = {}) =
+        viewModelScope.launch {
+            busy = true
+            val queue = io { repo.queueForNotes(noteIds) }
+            forgetUndo()
+            session = ReviewSession(
+                deckId = null,
+                deckName = name,
+                queue = queue,
+                stumbles = io { repo.missCounts() },
+            )
+            advance(0)
+            busy = false
+            onReady()
+        }
 
     // ---- 今日の1問 -----------------------------------------------------------
 

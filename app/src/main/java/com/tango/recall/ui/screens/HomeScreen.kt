@@ -106,10 +106,15 @@ fun HomeScreen(vm: AppViewModel, nav: NavController) {
                             modifier = Modifier.weight(1f),
                         ) { Text("つながり地図") }
                         OutlinedButton(
-                            onClick = { nav.navigate(Routes.UNIVERSITIES) },
+                            onClick = { nav.navigate(Routes.WORDS) },
                             modifier = Modifier.weight(1f),
-                        ) { Text("国公立大学") }
+                        ) { Text("英単語の棚") }
                     }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(
+                        onClick = { nav.navigate(Routes.UNIVERSITIES) },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text("国公立大学") }
                 }
             }
 
