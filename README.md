@@ -159,6 +159,17 @@ Anki では [FSRS Helper](https://github.com/open-spaced-repetition/fsrs4anki-he
 `git push` すると GitHub Actions（`.github/workflows/android.yml`）が同じものをビルドし、
 APK を artifact として添付します。
 
+### リリースする
+
+`.github/release.txt` にバージョン（例: `v1.5`）を書いて push すると、
+`.github/workflows/release.yml` がテストと release ビルドを走らせ、
+**タグと GitHub Release を作って APK を添付**します。
+リリースノートは `.github/release-notes/<タグ>.md` を置けばそれが使われます。
+
+タグを直接 push するのではなくファイル駆動にしているのは、ブランチを限定した認証では
+タグ ref への push が拒否されるためです。同じバージョンのリリースが既にあれば
+再ビルドせずに終了するので、間違って押しても安全です。
+
 **端末へのインストール**: APK を端末に移し、ファイルアプリから開きます。
 初回は「不明なアプリのインストール」の許可が必要です。
 
