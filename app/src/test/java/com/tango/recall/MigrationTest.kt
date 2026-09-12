@@ -191,6 +191,52 @@ class MigrationTest {
         assertEquals(1_800_000_000_000L, Repository(context).examDate)
     }
 
+    /** The schema version 3 shipped, i.e. what is on a device running v1.4. */
+    private fun createVersion3Database(): SQLiteDatabase {
+        val db = createVersion2Database()
+        db.execSQL(
+            "CREATE TABLE confusions(id INTEGER PRIMARY KEY AUTOINCREMENT, noteId INTEGER NOT NULL " +
+                "REFERENCES notes(id) ON DELETE CASCADE, otherNoteId INTEGER NOT NULL " +
+                "REFERENCES notes(id) ON DELETE CASCADE, templateId TEXT NOT NULL, " +
+                "typed TEXT NOT NULL, ts INTEGER NOT NULL)"
+        )
+        db.execSQL("CREATE INDEX idx_confusions_pair ON confusions(noteId, otherNoteId)")
+        db.version = 3
+        return db
+    }
+
+    @Test
+    fun upgradingFromVersionThreeMakesExistingNotesSearchableAndLeavesCardsAlone() {
+        val old = createVersion3Database()
+        old.execSQL(
+            "INSERT INTO decks(name, noteType, enabledTemplates, newPerDay, relationQuiz, created) " +
+                "VALUES('化学・計算', 'chem_calc', '[\"calc\"]', 20, 0, 1000)"
+        )
+        old.execSQL(
+            "INSERT INTO notes(deckId, type, fields, tags, created, modified) VALUES(1, 'chem_calc', " +
+                "'{\"question\":\"0.10 mol/L の酢酸水溶液の pH\",\"answer\":\"2.8\"}', '弱酸', 1000, 1000)"
+        )
+        old.execSQL(
+            "INSERT INTO cards(noteId, deckId, templateId, stability, difficulty, due, lastReview, " +
+                "phase, step, reps, lapses, suspended) " +
+                "VALUES(1, 1, 'calc', 21.0, 5.0, 2000, 1500, 'REVIEW', 0, 4, 0, 0)"
+        )
+        old.close()
+
+        val repo = Repository(context)
+
+        // The search text is built for notes written before the column existed...
+        assertEquals(1, repo.listNotes(null, "mol/L").size)
+        assertEquals(1, repo.listNotes(null, "弱酸").size)
+        assertTrue("field names are not content", repo.listNotes(null, "answer").isEmpty())
+
+        // ...and nothing about the card changes.
+        val card = repo.cardsOfNote(repo.listNotes(null, "").single().id).single()
+        assertEquals(4, card.srs.reps)
+        assertEquals(21.0, card.srs.stability, 1e-9)
+        assertFalse("an existing card is not put away by the upgrade", card.autoSuspended)
+    }
+
     @Test
     fun aFreshInstallStartsAtTheCurrentVersion() {
         val repo = Repository(context)

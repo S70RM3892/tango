@@ -314,6 +314,13 @@ data class Card(
     val templateId: String,
     val srs: SrsState = SrsState(),
     val suspended: Boolean = false,
+    /**
+     * True when the app suspended this card itself — its direction was switched off,
+     * or the field it asks about was emptied. Such a card keeps its review history and
+     * comes back the moment the direction applies again; a card the learner suspended
+     * by hand stays suspended.
+     */
+    val autoSuspended: Boolean = false,
 )
 
 data class NoteLink(

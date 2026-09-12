@@ -77,6 +77,8 @@ import com.tango.recall.Routes
 import com.tango.recall.data.GraphData
 import com.tango.recall.data.NoteType
 import com.tango.recall.ui.AppViewModel
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -134,11 +136,17 @@ fun GraphScreen(vm: AppViewModel, nav: NavController, initialDeckId: Long?) {
         }
         // Lay out into the screen's own shape; a square drawing on a tall phone wastes
         // the top and bottom of the display.
-        laid = ForceLayout.layout(
-            filtered,
-            width = 1000f * (viewport.width / viewport.height),
-            height = 1000f,
-        )
+        //
+        // Off the main thread: the layout is O(nodes²) per iteration, so running it in
+        // the composition's own context froze the UI for as long as it took — a second
+        // or more on a full map, which is where the map felt broken on first open.
+        laid = withContext(Dispatchers.Default) {
+            ForceLayout.layout(
+                filtered,
+                width = 1000f * (viewport.width / viewport.height),
+                height = 1000f,
+            )
+        }
         loading = false
     }
 
@@ -253,16 +261,22 @@ fun GraphScreen(vm: AppViewModel, nav: NavController, initialDeckId: Long?) {
                 }
             }
 
+            // Dragging the slider recomposes on every frame; the average is a
+            // forgetting curve per card, so it is worked out once per stop.
+            val meanStrength = remember(laid, atTime) {
+                laid?.nodes
+                    ?.filterNot { it.node.isNew }
+                    ?.map { it.node.strengthAt(atTime) }
+                    ?.takeIf { it.isNotEmpty() }?.average()
+            }
+
             TimeSlider(
                 stops = stops,
                 index = horizonIndex,
                 onIndexChange = { horizonIndex = it },
                 horizonDays = horizonDays,
                 examDays = examDays,
-                meanStrength = laid?.nodes
-                    ?.filterNot { it.node.isNew }
-                    ?.map { it.node.strengthAt(atTime) }
-                    ?.takeIf { it.isNotEmpty() }?.average(),
+                meanStrength = meanStrength,
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             )
 
@@ -314,7 +328,10 @@ private fun GraphView(
     onOpenNote: (com.tango.recall.data.GraphNode) -> Unit,
     onFocus: (Long) -> Unit,
 ) {
-    val measurer = rememberTextMeasurer()
+    // One entry per label that can be on screen at once. The default cache holds 8,
+    // so with the signal animation redrawing continuously every label was being laid
+    // out again on every single frame.
+    val measurer = rememberTextMeasurer(cacheSize = MAX_LABELS + 8)
 
     // Everything the gesture handlers touch is state read through a delegate, never a
     // captured parameter — that is what broke the pinch the first time round.
@@ -325,6 +342,15 @@ private fun GraphView(
 
     val positions = remember(graph) {
         mutableStateListOf<Offset>().apply { addAll(graph.nodes.map { Offset(it.x, it.y) }) }
+    }
+
+    // How brightly each node burns. It is a forgetting curve per card, and it only
+    // changes when the time slider moves — not on every frame of the animation.
+    val vitalities = remember(graph, atTime) {
+        FloatArray(graph.nodes.size) { i ->
+            val node = graph.nodes[i].node
+            if (node.isNew) 0f else (0.25f + 0.75f * node.strengthAt(atTime).toFloat())
+        }
     }
 
     val appear by animateFloatAsState(
@@ -440,7 +466,7 @@ private fun GraphView(
                 val isNeighbour = index in neighbours
                 val isDragged = index == dragging
                 // Never studied: outline only. Fading: the glow goes before the outline.
-                val vitality = if (node.isNew) 0f else (0.25f + 0.75f * node.strengthAt(atTime).toFloat())
+                val vitality = vitalities[index]
                 val dimmed = selected != null && !isSelected && !isNeighbour
 
                 if (glowEverything || isSelected || isNeighbour || node.degree >= 4) {

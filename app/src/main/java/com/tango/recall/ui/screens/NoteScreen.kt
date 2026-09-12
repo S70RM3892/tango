@@ -49,6 +49,7 @@ import com.tango.recall.data.Note
 import com.tango.recall.data.NoteType
 import com.tango.recall.data.RelatedNote
 import com.tango.recall.ui.AppViewModel
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -306,7 +307,10 @@ private fun LinkPickerDialog(
     var memo by remember { mutableStateOf("") }
     var typeMenu by remember { mutableStateOf(false) }
 
-    LaunchedEffect(query) { results = vm.notes(null, query).filter { it.id != fromNoteId }.take(30) }
+    LaunchedEffect(query) {
+        if (query.isNotBlank()) delay(SEARCH_DEBOUNCE_MS)
+        results = vm.notes(null, query).filter { it.id != fromNoteId }.take(30)
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,

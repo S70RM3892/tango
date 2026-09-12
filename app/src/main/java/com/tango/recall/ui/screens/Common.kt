@@ -26,6 +26,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
+/**
+ * How long the typing has to pause before a search actually runs.
+ *
+ * Every keystroke would otherwise scan the whole collection, and most keystrokes are
+ * on the way to a word rather than at it.
+ */
+internal const val SEARCH_DEBOUNCE_MS = 180L
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TangoTopBar(

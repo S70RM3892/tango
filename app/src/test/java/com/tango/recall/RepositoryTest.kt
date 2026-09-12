@@ -226,6 +226,24 @@ class RepositoryTest {
     }
 
     @Test
+    fun tsvImportFoldsRepeatsInsideOneFileIntoOneNote() {
+        val deckId = englishDeck()
+        val tsv = """
+            word	meaning	pos
+            versatile	多才な	形
+            versatile	用途の広い	形
+        """.trimIndent()
+
+        val result = ImportExport.importDelimited(repo, deckId, tsv)
+
+        val notes = repo.listNotes(deckId, "")
+        assertEquals("the same word twice is one note, not two", 1, notes.size)
+        assertEquals("用途の広い", notes.single()["meaning"])
+        assertEquals(1, result.added)
+        assertEquals(1, result.updated)
+    }
+
+    @Test
     fun tsvImportWithoutAHeaderUsesFieldOrder() {
         val deckId = englishDeck()
         val result = ImportExport.importDelimited(repo, deckId, "tenacious\t粘り強い\t形")

@@ -15,7 +15,11 @@ data class ImportResult(val added: Int, val updated: Int, val skipped: Int, val 
  */
 object ImportExport {
 
-    private const val FORMAT_VERSION = 1
+    /**
+     * 2 adds the fields a restore used to drop on the floor: whether a deck also
+     * drills its relations, the exam date, the shortlist and the mix-up log.
+     */
+    private const val FORMAT_VERSION = 2
 
     // ---- JSON backup --------------------------------------------------------
 
@@ -37,9 +41,12 @@ object ImportExport {
                     .put("noteType", deck.noteTypeId)
                     .put("enabledTemplates", JSONArray(deck.enabledTemplates.toList()))
                     .put("newPerDay", deck.newPerDay)
+                    .put("relationQuiz", deck.relationQuiz)
                     .put("created", deck.created)
             )
-            for (note in repo.listNotes(deck.id, "", Int.MAX_VALUE)) {
+            val deckNotes = repo.listNotes(deck.id, "", Int.MAX_VALUE)
+            val cardsByNote = repo.cardsOfNotes(deckNotes.map { it.id })
+            for (note in deckNotes) {
                 notesArr.put(
                     JSONObject()
                         .put("id", note.id)
@@ -50,7 +57,7 @@ object ImportExport {
                         .put("created", note.created)
                         .put("modified", note.modified)
                 )
-                for (card in repo.cardsOfNote(note.id)) {
+                for (card in cardsByNote[note.id].orEmpty()) {
                     cardsArr.put(
                         JSONObject()
                             .put("noteId", card.noteId)
@@ -64,6 +71,7 @@ object ImportExport {
                             .put("reps", card.srs.reps)
                             .put("lapses", card.srs.lapses)
                             .put("suspended", card.suspended)
+                            .put("autoSuspended", card.autoSuspended)
                     )
                 }
             }
@@ -78,15 +86,30 @@ object ImportExport {
             )
         }
 
+        // Which pairs this learner mixes up is as much a record of their memory as the
+        // schedule is, and it is what links pairs automatically at the second slip.
+        val confusionsArr = JSONArray()
+        repo.raw().rawQuery("SELECT * FROM confusions", null).mapAll { c ->
+            JSONObject()
+                .put("noteId", c.long("noteId"))
+                .put("otherNoteId", c.long("otherNoteId"))
+                .put("templateId", c.str("templateId"))
+                .put("typed", c.str("typed"))
+                .put("ts", c.long("ts"))
+        }.forEach { confusionsArr.put(it) }
+
         val settings = JSONObject()
             .put(Repository.KEY_RETENTION, repo.desiredRetention)
             .put(Repository.KEY_SHOW_RELATED, repo.showRelated)
             .put(Repository.KEY_MAX_REVIEWS, repo.maxReviewsPerDay)
+            .put(Repository.KEY_EXAM_DATE, repo.examDate)
+            .put(Repository.KEY_SHORTLIST, JSONArray(repo.shortlist.toList()))
 
         root.put("decks", decks)
         root.put("notes", notesArr)
         root.put("cards", cardsArr)
         root.put("links", linksArr)
+        root.put("confusions", confusionsArr)
         root.put("settings", settings)
         return root.toString(2)
     }
@@ -106,6 +129,7 @@ object ImportExport {
         var links = 0
         repo.transaction {
             val db = repo.raw()
+            db.execSQL("DELETE FROM confusions")
             db.execSQL("DELETE FROM links")
             db.execSQL("DELETE FROM cards")
             db.execSQL("DELETE FROM notes")
@@ -124,6 +148,7 @@ object ImportExport {
                             for (j in 0 until templates.length()) add(templates.getString(j))
                         },
                         newPerDay = d.optInt("newPerDay", 20),
+                        relationQuiz = d.optBoolean("relationQuiz", false),
                         created = d.optLong("created", System.currentTimeMillis()),
                     )
                 )
@@ -149,6 +174,17 @@ object ImportExport {
                 notes++
             }
 
+            // Relations first: a deck that quizzes its relations owns cards that only
+            // exist once the links do, and restoring the schedule of those cards is the
+            // whole point of a backup.
+            val linksArr = root.optJSONArray("links") ?: JSONArray()
+            for (i in 0 until linksArr.length()) {
+                val l = linksArr.getJSONObject(i)
+                val from = noteIdMap[l.optLong("from")] ?: continue
+                val to = noteIdMap[l.optLong("to")] ?: continue
+                if (repo.addLink(from, to, LinkType.fromId(l.optString("type")), l.optString("memo"))) links++
+            }
+
             val cardsArr = root.optJSONArray("cards") ?: JSONArray()
             for (i in 0 until cardsArr.length()) {
                 val c = cardsArr.getJSONObject(i)
@@ -167,22 +203,30 @@ object ImportExport {
                         lapses = c.optInt("lapses", 0),
                     ),
                     suspended = c.optBoolean("suspended", false),
+                    autoSuspended = c.optBoolean("autoSuspended", false),
                 )
                 db.update("cards", restored.toValues(), "id=?", arrayOf(existing.id.toString()))
             }
 
-            val linksArr = root.optJSONArray("links") ?: JSONArray()
-            for (i in 0 until linksArr.length()) {
-                val l = linksArr.getJSONObject(i)
-                val from = noteIdMap[l.optLong("from")] ?: continue
-                val to = noteIdMap[l.optLong("to")] ?: continue
-                if (repo.addLink(from, to, LinkType.fromId(l.optString("type")), l.optString("memo"))) links++
+            val confusionsArr = root.optJSONArray("confusions") ?: JSONArray()
+            for (i in 0 until confusionsArr.length()) {
+                val c = confusionsArr.getJSONObject(i)
+                val noteId = noteIdMap[c.optLong("noteId")] ?: continue
+                val otherId = noteIdMap[c.optLong("otherNoteId")] ?: continue
+                db.execSQL(
+                    "INSERT INTO confusions(noteId, otherNoteId, templateId, typed, ts) VALUES(?,?,?,?,?)",
+                    arrayOf(noteId, otherId, c.optString("templateId"), c.optString("typed"), c.optLong("ts")),
+                )
             }
 
             root.optJSONObject("settings")?.let { s ->
                 repo.desiredRetention = s.optDouble(Repository.KEY_RETENTION, 0.9)
                 repo.showRelated = s.optBoolean(Repository.KEY_SHOW_RELATED, true)
                 repo.maxReviewsPerDay = s.optInt(Repository.KEY_MAX_REVIEWS, 200)
+                repo.examDate = s.optLong(Repository.KEY_EXAM_DATE, 0L)
+                repo.shortlist = s.optJSONArray(Repository.KEY_SHORTLIST)?.let { a ->
+                    buildSet { for (j in 0 until a.length()) add(a.getString(j)) }
+                } ?: emptySet()
             }
             repo.putSetting(Repository.KEY_SEEDED, "1")
         }
@@ -219,7 +263,10 @@ object ImportExport {
 
         var added = 0
         var skipped = 0
-        val existing = repo.listNotes(deckId, "", Int.MAX_VALUE).associateBy { it.title() }
+        // Keyed by heading word, and kept up to date as rows are read: a file that
+        // lists the same word twice should end with one note, not two.
+        val existing = repo.listNotes(deckId, "", Int.MAX_VALUE)
+            .associateByTo(mutableMapOf()) { it.title() }
         var updated = 0
 
         repo.transaction {
@@ -239,10 +286,15 @@ object ImportExport {
                 val prior = existing[title]
                 if (prior != null) {
                     // Merge: imported values win, existing extra fields are kept.
-                    repo.saveNote(prior.copy(fields = prior.fields + fields, tags = (prior.tags + tags).distinct()))
+                    val merged = prior.copy(
+                        fields = prior.fields + fields,
+                        tags = (prior.tags + tags).distinct(),
+                    )
+                    repo.saveNote(merged)
+                    existing[title] = merged
                     updated++
                 } else {
-                    repo.saveNote(candidate)
+                    existing[title] = candidate.copy(id = repo.saveNote(candidate))
                     added++
                 }
             }

@@ -496,9 +496,12 @@ private fun SessionSummary(session: ReviewSession, vm: AppViewModel, nav: NavCon
             StatTile("$accuracy%", "正答率")
         }
         Spacer(Modifier.height(32.dp))
-        Button(onClick = { vm.startReview(deckId) }, modifier = Modifier.fillMaxWidth()) {
-            Text("もう一度キューを作る")
-        }
+        Button(
+            // Stay in the mode the session was started in: in exam mode a fresh queue
+            // must again be "weakest on the day", not today's due cards.
+            onClick = { vm.startReview(deckId, session.examMode) },
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("もう一度キューを作る") }
         Spacer(Modifier.height(8.dp))
         OutlinedButton(
             onClick = { vm.endReview(); nav.popBackStack() },

@@ -37,6 +37,7 @@ import androidx.navigation.NavController
 import com.tango.recall.Routes
 import com.tango.recall.data.Note
 import com.tango.recall.ui.AppViewModel
+import kotlinx.coroutines.delay
 
 @Composable
 fun BrowseScreen(vm: AppViewModel, nav: NavController, deckId: Long?) {
@@ -45,7 +46,12 @@ fun BrowseScreen(vm: AppViewModel, nav: NavController, deckId: Long?) {
     var pickDeck by remember { mutableStateOf(false) }
     val deckName = vm.decks.firstOrNull { it.id == deckId }?.name ?: "すべてのカード"
 
-    LaunchedEffect(deckId, query) { notes = vm.notes(deckId, query) }
+    LaunchedEffect(deckId, query) {
+        // Every keystroke scans the collection, and most keystrokes are on the way to a
+        // word rather than at it; wait until the typing pauses.
+        if (query.isNotBlank()) delay(SEARCH_DEBOUNCE_MS)
+        notes = vm.notes(deckId, query)
+    }
 
     Scaffold(
         topBar = { TangoTopBar(deckName, onBack = { nav.popBackStack() }) },

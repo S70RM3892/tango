@@ -187,7 +187,10 @@ class Repository(private val helper: TangoDb) {
         } else {
             db.update("decks", cv, "id=?", arrayOf(deck.id.toString()))
             // Enabling/disabling a direction must add or remove the matching cards.
-            listNotes(deck.id, "", Int.MAX_VALUE).forEach { regenerateCards(it, deck) }
+            // One transaction for the whole deck: otherwise every statement commits on
+            // its own and saving a large deck takes seconds.
+            val notes = listNotes(deck.id, "", Int.MAX_VALUE)
+            transaction { notes.forEach { regenerateCards(it, deck) } }
             deck.id
         }
     }
@@ -228,8 +231,11 @@ class Repository(private val helper: TangoDb) {
             append("1=1")
             if (deckId != null) { append(" AND deckId=?"); args += deckId.toString() }
             if (query.isNotBlank()) {
-                append(" AND (fields LIKE ? OR tags LIKE ?)")
-                args += "%$query%"; args += "%$query%"
+                // The note's own search text, not the raw JSON: that matched field
+                // *names* ("memo" found every note) and missed anything org.json
+                // escapes, "mol/L" among them.
+                append(" AND search LIKE ? ESCAPE '\\'")
+                args += "%${query.trim().lowercase().escapeLikeArgument()}%"
             }
         }
         return db.rawQuery(
@@ -259,6 +265,7 @@ class Repository(private val helper: TangoDb) {
             put("type", note.typeId)
             put("fields", note.fields.toJson())
             put("tags", note.tags.tagsToDb())
+            put("search", searchText(note.fields, note.tags))
             put("created", if (note.id == 0L) now else note.created)
             put("modified", now)
         }
@@ -299,8 +306,25 @@ class Repository(private val helper: TangoDb) {
                 SQLiteDatabase.CONFLICT_IGNORE,
             )
         }
-        for (card in existing.filter { it.templateId !in wanted }) {
-            db.delete("cards", "id=?", arrayOf(card.id.toString()))
+        for (card in existing) {
+            val id = arrayOf<Any>(card.id)
+            when {
+                // The direction applies again — bring back what the app had put away,
+                // with its schedule intact. A card suspended by hand stays suspended.
+                card.templateId in wanted ->
+                    if (card.autoSuspended) {
+                        db.execSQL("UPDATE cards SET suspended=0, autoSuspended=0 WHERE id=?", id)
+                    }
+
+                // Never studied: there is nothing to preserve, so drop it.
+                card.srs.reps == 0 && card.srs.phase == CardPhase.NEW ->
+                    db.delete("cards", "id=?", arrayOf(card.id.toString()))
+
+                // Studied: turning a direction off, or clearing the field it asks
+                // about, must not throw away weeks of review history.
+                !card.suspended ->
+                    db.execSQL("UPDATE cards SET suspended=1, autoSuspended=1 WHERE id=?", id)
+            }
         }
         // A note can be moved between decks; keep its cards pointing at the right one.
         db.execSQL("UPDATE cards SET deckId=? WHERE noteId=?", arrayOf(note.deckId, note.id))
@@ -346,12 +370,29 @@ class Repository(private val helper: TangoDb) {
         db.rawQuery("SELECT * FROM cards WHERE noteId=? ORDER BY id", arrayOf(noteId.toString()))
             .mapAll { it.toCard() }
 
+    /**
+     * The cards of many notes in one query.
+     *
+     * The connection map and the backup both walk every note; asking per note made
+     * that one query per note, which is what made opening the map slow.
+     */
+    fun cardsOfNotes(noteIds: Collection<Long>): Map<Long, List<Card>> {
+        if (noteIds.isEmpty()) return emptyMap()
+        return db.rawQuery(
+            "SELECT * FROM cards WHERE noteId IN (${noteIds.joinToString(",")}) ORDER BY id", null,
+        ).mapAll { it.toCard() }.groupBy { it.noteId }
+    }
+
     fun card(id: Long): Card? =
         db.rawQuery("SELECT * FROM cards WHERE id=?", arrayOf(id.toString())).mapAll { it.toCard() }
             .firstOrNull()
 
+    /** Suspend or resume by hand. The learner's choice outranks the automatic one. */
     fun setSuspended(cardId: Long, suspended: Boolean) {
-        db.execSQL("UPDATE cards SET suspended=? WHERE id=?", arrayOf(if (suspended) 1 else 0, cardId))
+        db.execSQL(
+            "UPDATE cards SET suspended=?, autoSuspended=0 WHERE id=?",
+            arrayOf(if (suspended) 1 else 0, cardId),
+        )
     }
 
     // ---- study queue --------------------------------------------------------
@@ -448,7 +489,7 @@ class Repository(private val helper: TangoDb) {
     /** Grade a card, persist the new schedule and append to the review log. */
     fun answer(card: Card, rating: Rating, now: Long = System.currentTimeMillis(), tookMs: Long = 0): Card {
         val phaseBefore = card.srs.phase
-        val newState = scheduler().review(card.srs, rating, now)
+        val newState = scheduler(now).review(card.srs, rating, now)
         val updated = card.copy(srs = newState)
         db.update("cards", updated.toValues(), "id=?", arrayOf(card.id.toString()))
         db.insert(
@@ -555,6 +596,10 @@ class Repository(private val helper: TangoDb) {
 
     private fun String.escapeLike() = replace("%", "").replace("_", "")
 
+    /** Quote the wildcards so a search for "50%" looks for a per-cent sign. */
+    private fun String.escapeLikeArgument() =
+        replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
     // ---- stats --------------------------------------------------------------
 
     fun stats(now: Long = System.currentTimeMillis()): Stats {
@@ -575,17 +620,6 @@ class Repository(private val helper: TangoDb) {
             )
         }
 
-        var streak = 0
-        for (d in 0..365) {
-            val from = dayStart(now, d)
-            val to = dayStart(now, d - 1)
-            val n = scalarInt(
-                "SELECT COUNT(*) FROM reviews WHERE ts>=? AND ts<?",
-                arrayOf(from.toString(), to.toString()),
-            )
-            if (n > 0) streak++ else if (d > 0) break
-        }
-
         val avgStability = db.rawQuery(
             "SELECT AVG(stability) FROM cards WHERE phase='REVIEW'", null,
         ).use { if (it.moveToFirst() && !it.isNull(0)) it.getDouble(0) else 0.0 }
@@ -602,12 +636,39 @@ class Repository(private val helper: TangoDb) {
             totalCards = scalarInt("SELECT COUNT(*) FROM cards"),
             reviewsToday = reviewsToday,
             correctToday = correctToday,
-            streakDays = streak,
+            streakDays = studyStreak(now),
             dueNext7Days = forecast,
             matureCards = scalarInt("SELECT COUNT(*) FROM cards WHERE phase='REVIEW' AND stability>=21"),
             averageStability = avgStability,
             hardest = hardest,
         )
+    }
+
+    /**
+     * Consecutive days studied, ending today — or yesterday, if today's session has
+     * not happened yet.
+     *
+     * Walks back from the most recent review instead of asking about each of the last
+     * 365 days in turn: one query per day actually studied, and it stops at the first
+     * gap rather than always running the whole year.
+     */
+    internal fun studyStreak(now: Long = System.currentTimeMillis()): Int {
+        val today = dayStart(now)
+        var streak = 0
+        var expected = 0
+        var boundary = dayStart(now, -1)
+        while (streak <= 365) {
+            val last = db.rawQuery(
+                "SELECT MAX(ts) FROM reviews WHERE ts<?", arrayOf(boundary.toString()),
+            ).use { if (it.moveToFirst() && !it.isNull(0)) it.getLong(0) else null } ?: break
+            val daysAgo = Math.round((today - dayStart(last)).toDouble() / 86_400_000.0).toInt()
+            // Not having studied yet today does not break a streak; a missed day does.
+            if (daysAgo != expected && !(streak == 0 && daysAgo == 1)) break
+            streak++
+            expected = daysAgo + 1
+            boundary = dayStart(now, daysAgo)
+        }
+        return streak
     }
 
     /** Cards whose predicted recall has already dropped below [threshold]. */
@@ -645,8 +706,9 @@ class Repository(private val helper: TangoDb) {
             degree[link.toNoteId] = (degree[link.toNoteId] ?: 0) + 1
         }
 
+        val cardsByNote = cardsOfNotes(ids)
         val nodes = notes.map { note ->
-            val cards = cardsOfNote(note.id)
+            val cards = cardsByNote[note.id].orEmpty()
             val seen = cards.filter { it.srs.phase != CardPhase.NEW }
             GraphNode(
                 noteId = note.id,

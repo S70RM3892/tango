@@ -132,7 +132,7 @@ Anki では [FSRS Helper](https://github.com/open-spaced-repetition/fsrs4anki-he
 | つながり地図 | 全ノートの関係図。ピンチで拡大、ノードをタップで詳細、デッキで絞り込み |
 | 国公立大学 | 日本地図で絞り込む大学データベース。系統・地方・定員でソート |
 | ノート編集 | 欄の編集、タグ、生成されるカードの確認、関係の追加・削除、関連候補 |
-| 一覧 | 全文検索（語・意味・化学式・タグ） |
+| 一覧 | 全文検索（語・意味・化学式・タグ）。`mol/L` のような記号もそのまま探せます |
 | デッキ設定 | 出題する向き、1日の新規上限、TSV/CSV の取り込み・書き出し |
 | 学習の状況 | 今日の解答数・正答率・連続日数、7日間の予定、忘れそうな項目、よく間違える項目 |
 | 設定 | 目標定着率、1日の復習上限、つながり表示、JSON バックアップ |
@@ -142,7 +142,8 @@ Anki では [FSRS Helper](https://github.com/open-spaced-repetition/fsrs4anki-he
 - **TSV / CSV 取り込み** — デッキ設定から。1行目が欄名なら見出しとして扱い、
   なければノート型の欄の順に割り当てます。同じ見出し語は重複させず更新します。
   ファイル選択と貼り付けの両方に対応。
-- **JSON バックアップ** — デッキ・ノート・関係・**学習の進み具合**をまとめて書き出し／復元。
+- **JSON バックアップ** — デッキ・ノート・関係・**学習の進み具合**に加えて、関係の出題設定・
+  試験日・志望校リスト・取り違えの記録までまとめて書き出し／復元。
   機種変更のときはこれを読み込めば続きから学習できます。
 
 初回起動時に、語源でつながる英単語24語、無機化学の物質14件・製法8件、和文英訳5題、化学の計算7題が
@@ -153,7 +154,7 @@ Anki では [FSRS Helper](https://github.com/open-spaced-repetition/fsrs4anki-he
 ```bash
 ./gradlew assembleDebug        # app/build/outputs/apk/debug/app-debug.apk
 ./gradlew assembleRelease      # app/build/outputs/apk/release/app-release.apk
-./gradlew testDebugUnitTest    # 143 件のユニットテスト
+./gradlew testDebugUnitTest    # 167 件のユニットテスト
 ```
 
 `git push` すると GitHub Actions（`.github/workflows/android.yml`）が同じものをビルドし、
@@ -198,8 +199,12 @@ app/src/main/java/com/tango/recall/
   ui/                      Compose の画面
 ```
 
-データベースは追加のみのマイグレーションで上げています（v1 → v2 → v3）。
+データベースは追加のみのマイグレーションで上げています（v1 → v2 → v3 → v4）。
 すでに入れてあるアプリを上書きインストールしても、学習の進み具合は失われません。
+
+**出題の向きを外しても、カードは消えません。** 一度でも学習したカードは削除ではなく保留になり、
+その向きを戻すか、空にした欄を埋め直すと、間隔も履歴もそのまま戻ってきます
+（自分で保留したカードは保留のままです）。
 
 要件: JDK 17、Android SDK（compileSdk 36）、minSdk 26 (Android 8.0)。
 外部の依存は Compose と AndroidX のみで、注釈処理（KSP/Room）は使っていません。
