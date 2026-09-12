@@ -263,6 +263,52 @@ enum class NoteType(
     ),
 
     /**
+     * 化学・理論.
+     *
+     * The laws rather than the substances: gas equations, equilibrium, thermochemistry,
+     * cells. Each one is a relation plus the conditions it holds under, and it is
+     * almost always the conditions that decide the mark — Henry's law needs a sparingly
+     * soluble gas, the boiling-point elevation needs the particle count after
+     * dissociation. So the note keeps the formula and its conditions as separate fields
+     * and asks about them separately.
+     */
+    CHEM_THEORY(
+        id = "chem_theory",
+        label = "化学・理論",
+        subject = Subject.CHEMISTRY,
+        fields = listOf(
+            FieldDef("title", "法則・項目", "気体の状態方程式"),
+            FieldDef("formula", "式", "PV = nRT"),
+            FieldDef(
+                "meaning", "記号の意味",
+                "P: 圧力、V: 体積、n: 物質量、R: 気体定数、T: 絶対温度",
+                multiline = true,
+            ),
+            FieldDef(
+                "condition", "成り立つ条件・使いどころ",
+                "理想気体。高温・低圧ほどよく合う",
+                multiline = true,
+            ),
+            FieldDef("point", "押さえる点", "", multiline = true),
+            FieldDef("memo", "メモ", "", multiline = true),
+        ),
+        templates = listOf(
+            CardTemplate(
+                "theory_formula", "項目 → 式", listOf("title"), listOf("formula", "meaning"),
+                AnswerMode.REVEAL, requires = listOf("title", "formula"),
+            ),
+            CardTemplate(
+                "theory_name", "式 → 項目", listOf("formula"), listOf("title", "meaning"),
+                AnswerMode.REVEAL, requires = listOf("title", "formula"),
+            ),
+            CardTemplate(
+                "theory_condition", "項目 → 成り立つ条件", listOf("title"), listOf("condition", "point"),
+                AnswerMode.REVEAL, requires = listOf("title", "condition"),
+            ),
+        ),
+    ),
+
+    /**
      * 数学.
      *
      * A maths problem is not memorised, but the move that opens it is: "classify by
@@ -416,6 +462,7 @@ enum class LinkType(
             NoteType.CHEM_CALC -> listOf(SAME_GROUP, CONTRAST, RELATED)
             NoteType.MATH -> listOf(SAME_GROUP, CONTRAST, CONFUSABLE, HYPERNYM, RELATED)
             NoteType.PHYSICS -> listOf(SAME_GROUP, CONTRAST, CONFUSABLE, PRODUCES, RELATED)
+            NoteType.CHEM_THEORY -> listOf(SAME_GROUP, CONTRAST, CONFUSABLE, HYPERNYM, RELATED)
             NoteType.BASIC -> entries
         }
     }
@@ -457,6 +504,7 @@ data class Note(
         NoteType.CHEM_CALC -> this["question"]
         NoteType.MATH -> this["question"]
         NoteType.PHYSICS -> this["title"]
+        NoteType.CHEM_THEORY -> this["title"]
         NoteType.BASIC -> this["front"]
     }.ifBlank { type.fields.firstNotNullOfOrNull { fields[it.id]?.ifBlank { null } } ?: "(空)" }
 
@@ -469,6 +517,7 @@ data class Note(
         NoteType.CHEM_CALC -> listOf(this["answer"], this["unit"]).filter { it.isNotBlank() }.joinToString(" ")
         NoteType.MATH -> this["approach"]
         NoteType.PHYSICS -> this["formula"]
+        NoteType.CHEM_THEORY -> this["formula"]
         NoteType.BASIC -> this["back"]
     }
 }

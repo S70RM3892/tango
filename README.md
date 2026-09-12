@@ -57,6 +57,7 @@ Android アプリ（Kotlin / Jetpack Compose）。
 - 和文英訳: 日本語文→英訳を書く / 言い換えのポイントだけ確認
 - 英文和訳: 英文→和訳を書く / 構文の取り方だけ確認
 - 化学・計算: 計算して答える / 解き方を思い出す
+- 化学・理論: 項目→式 / 式→項目 / 項目→成り立つ条件
 - 数学: 問題→方針を書く（自己採点） / 問題→使う道具 / 方針→落とし穴
 - 物理・原子: 項目→式 / 式→項目 / 項目→使いどころ
 
@@ -168,7 +169,7 @@ Anki では [FSRS Helper](https://github.com/open-spaced-repetition/fsrs4anki-he
 
 ## 同梱データ
 
-**505 ノート / 2,105 カード / 736 の関係**が、**関係づけ済み**で入ります。孤立したノートは 0 件です。
+**535 ノート / 2,240 カード / 765 の関係**が、**関係づけ済み**で入ります。孤立したノートは 0 件です。
 不要なら削除して構いません。
 
 | 中身 | 件数 |
@@ -176,6 +177,7 @@ Anki では [FSRS Helper](https://github.com/open-spaced-repetition/fsrs4anki-he
 | 英単語（語源・分野で76グループ） | 311 語 |
 | 化学・物質（無機32・有機29） | 61 件 |
 | 化学・反応（無機27・有機30） | 57 件 |
+| 化学・理論（気体・溶液・熱・平衡・速度・電池・結晶） | 30 項目 |
 | 化学・計算 | 16 題 |
 | 数学・定石 | 24 題 |
 | 物理・原子 | 18 項目 |
@@ -248,6 +250,7 @@ app/src/main/java/com/tango/recall/
   data/SeedWordList.kt     同梱データ（英単語の表・1行1語）
   data/SeedMath.kt         同梱データ（数学の定石）
   data/SeedPhysics.kt      同梱データ（物理・原子）
+  data/SeedChemTheory.kt   同梱データ（化学・理論）
   notify/Reminders.kt      毎日の通知とその再設定
   ui/screens/ForceLayout.kt  つながり地図の力学配置
   ui/screens/GraphCamera.kt  地図の拡大・移動の演算（テストで固定）
