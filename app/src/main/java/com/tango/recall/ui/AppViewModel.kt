@@ -25,6 +25,8 @@ import com.tango.recall.data.Note
 import com.tango.recall.data.NoteType
 import com.tango.recall.data.RelatedNote
 import com.tango.recall.data.RenderedCard
+import com.tango.recall.data.ReadingProgress
+import com.tango.recall.data.ReadingRecord
 import com.tango.recall.data.Repository
 import com.tango.recall.data.RootShelf
 import com.tango.recall.data.Seed
@@ -483,6 +485,25 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun subjects(): List<Subject> = io {
         val present = repo.listDecks().map { it.noteType.subject }.toSet()
         Subject.entries.filter { it in present }
+    }
+
+    // ---- 速読 -----------------------------------------------------------------
+
+    suspend fun readingPassages(): List<Note> = io { repo.readingPassages() }
+
+    suspend fun readingProgress(): ReadingProgress = io { repo.readingProgress() }
+
+    suspend fun lastReading(noteId: Long): ReadingRecord? = io { repo.lastReading(noteId) }
+
+    fun recordReading(
+        noteId: Long,
+        tookMs: Long,
+        words: Int,
+        understood: Boolean,
+        onDone: () -> Unit = {},
+    ) = viewModelScope.launch {
+        io { repo.recordReading(noteId, tookMs, words, understood) }
+        onDone()
     }
 
     // ---- the word shelf ------------------------------------------------------

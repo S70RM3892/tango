@@ -1027,6 +1027,7 @@ private fun colorFor(typeId: String): Color = when (typeId) {
     NoteType.ENGLISH.id -> Color(0xFF5B9BFF)
     NoteType.CHEM_SUBSTANCE.id -> Color(0xFF2DD4BF)
     NoteType.CHEM_REACTION.id -> Color(0xFFFBBF24)
+    NoteType.IDIOM.id -> Color(0xFF818CF8)
     NoteType.EISAKUBUN.id -> Color(0xFFC084FC)
     NoteType.WAYAKU.id -> Color(0xFFF472B6)
     NoteType.CHEM_CALC.id -> Color(0xFF4ADE80)

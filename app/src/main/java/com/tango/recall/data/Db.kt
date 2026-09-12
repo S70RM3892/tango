@@ -101,6 +101,7 @@ class TangoDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VE
             """.trimIndent()
         )
         db.execSQL(CREATE_CONFUSIONS)
+        db.execSQL(CREATE_READINGS)
         db.execSQL("CREATE TABLE settings(k TEXT PRIMARY KEY, v TEXT NOT NULL)")
 
         db.execSQL("CREATE INDEX idx_cards_due ON cards(deckId, suspended, due)")
@@ -111,6 +112,7 @@ class TangoDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VE
         db.execSQL("CREATE INDEX idx_reviews_ts ON reviews(ts)")
         db.execSQL(INDEX_REVIEWS_CARD)
         db.execSQL(INDEX_CONFUSIONS)
+        db.execSQL(INDEX_READINGS)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -138,6 +140,12 @@ class TangoDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VE
             // missed, and to find the review that undo has to remove.
             db.execSQL(INDEX_REVIEWS_CARD)
         }
+        if (oldVersion < 6) {
+            // Reading speed is a measurement over time, so it needs its own log: a
+            // single "best" figure hides whether it is going up.
+            db.execSQL(CREATE_READINGS)
+            db.execSQL(INDEX_READINGS)
+        }
     }
 
     /** Fill the new search column for notes written by an earlier version. */
@@ -157,7 +165,7 @@ class TangoDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VE
 
     companion object {
         const val DB_NAME = "tango.db"
-        const val DB_VERSION = 5
+        const val DB_VERSION = 6
 
         /** Every time one note's answer was written where another note's was wanted. */
         private const val CREATE_CONFUSIONS = """
@@ -175,6 +183,20 @@ class TangoDb(context: Context) : SQLiteOpenHelper(context, DB_NAME, null, DB_VE
             "CREATE INDEX idx_confusions_pair ON confusions(noteId, otherNoteId)"
 
         private const val INDEX_REVIEWS_CARD = "CREATE INDEX idx_reviews_card ON reviews(cardId)"
+
+        /** One timed read: how long it took, how much text, and whether it was understood. */
+        private const val CREATE_READINGS = """
+            CREATE TABLE readings(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              noteId INTEGER NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
+              ts INTEGER NOT NULL,
+              tookMs INTEGER NOT NULL,
+              words INTEGER NOT NULL,
+              understood INTEGER NOT NULL
+            )
+        """
+
+        private const val INDEX_READINGS = "CREATE INDEX idx_readings_ts ON readings(ts)"
     }
 }
 

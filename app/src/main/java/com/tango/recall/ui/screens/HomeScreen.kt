@@ -113,10 +113,16 @@ fun HomeScreen(vm: AppViewModel, nav: NavController) {
                         ) { Text("英単語の棚") }
                     }
                     Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = { nav.navigate(Routes.UNIVERSITIES) },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) { Text("国公立大学") }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = { nav.navigate(Routes.READING) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("速読") }
+                        OutlinedButton(
+                            onClick = { nav.navigate(Routes.UNIVERSITIES) },
+                            modifier = Modifier.weight(1f),
+                        ) { Text("国公立大学") }
+                    }
                 }
             }
 

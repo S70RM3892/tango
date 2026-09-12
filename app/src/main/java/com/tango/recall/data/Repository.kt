@@ -7,6 +7,7 @@ import com.tango.recall.srs.Fsrs
 import com.tango.recall.srs.FsrsScheduler
 import com.tango.recall.srs.Rating
 import java.util.Calendar
+import kotlin.math.roundToInt
 
 data class RelationGroup(
     val type: LinkType,
@@ -71,6 +72,12 @@ data class RootShelf(val root: String, val words: List<WordCell>) {
         studied.takeIf { it.isNotEmpty() }?.map { it.strengthAt(at) }?.average()
 }
 
+/** Reading rate in words per minute, from a word count and how long it took. */
+fun wordsPerMinute(words: Int, tookMs: Long): Int {
+    if (words <= 0 || tookMs <= 0) return 0
+    return (words * 60_000.0 / tookMs).roundToInt()
+}
+
 /** Mean predicted recall of a set of cards at [at]. A card never seen counts as 0. */
 internal fun meanRecall(memory: List<CardMemory>, at: Long): Double {
     if (memory.isEmpty()) return 0.0
@@ -98,6 +105,31 @@ data class ExamOutlook(
 )
 
 data class ConfusionPair(val a: Note, val b: Note, val times: Int, val linked: Boolean)
+
+/** One timed read. */
+data class ReadingRecord(
+    val noteId: Long,
+    val ts: Long,
+    val wordsPerMinute: Int,
+    val understood: Boolean,
+)
+
+/**
+ * How the reading is going.
+ *
+ * Speed on its own is meaningless — skimming is fast — so the rate is always reported
+ * next to how often the passage was actually understood.
+ */
+data class ReadingProgress(
+    val sessions: Int,
+    val meanWordsPerMinute: Int?,
+    val bestWordsPerMinute: Int?,
+    val understoodRate: Double?,
+    val recent: List<ReadingRecord>,
+)
+
+/** Words in a piece of English, counted the way a reading rate is counted. */
+fun wordCount(text: String): Int = Regex("[A-Za-z0-9'’\\-]+").findAll(text).count()
 
 /** A card that keeps being answered wrong, with how often it has been missed. */
 data class Leech(val note: Note, val card: Card, val misses: Int) {
@@ -941,6 +973,64 @@ class Repository(private val helper: TangoDb) {
         }
     }
 
+    // ---- 速読 -----------------------------------------------------------------
+
+    fun readingPassages(limit: Int = 200): List<Note> =
+        listNotes(null, "", limit, Subject.ENGLISH).filter { it.type == NoteType.READING }
+
+    /**
+     * Log one timed read.
+     *
+     * Both halves are kept: a rate without a comprehension check measures skimming,
+     * and a comprehension check without a clock measures nothing new.
+     */
+    fun recordReading(noteId: Long, tookMs: Long, words: Int, understood: Boolean) {
+        db.insert(
+            "readings", null,
+            ContentValues().apply {
+                put("noteId", noteId)
+                put("ts", System.currentTimeMillis())
+                put("tookMs", tookMs.coerceAtLeast(1L))
+                put("words", words.coerceAtLeast(0))
+                put("understood", if (understood) 1 else 0)
+            },
+        )
+    }
+
+    private fun readingRecords(where: String = "1=1", args: Array<String> = emptyArray(), limit: Int = 50) =
+        db.rawQuery(
+            "SELECT noteId, ts, tookMs, words, understood FROM readings WHERE $where ORDER BY ts DESC LIMIT $limit",
+            args,
+        ).mapAll {
+            ReadingRecord(
+                noteId = it.getLong(0),
+                ts = it.getLong(1),
+                wordsPerMinute = wordsPerMinute(it.getInt(3), it.getLong(2)),
+                understood = it.getInt(4) != 0,
+            )
+        }
+
+    fun lastReading(noteId: Long): ReadingRecord? =
+        readingRecords("noteId=?", arrayOf(noteId.toString()), limit = 1).firstOrNull()
+
+    fun readingProgress(limit: Int = 20): ReadingProgress {
+        val recent = readingRecords(limit = limit)
+        val total = db.rawQuery("SELECT COUNT(*) FROM readings", null)
+            .use { if (it.moveToFirst()) it.getInt(0) else 0 }
+        // Only reads that were understood count towards the rate: otherwise the way to
+        // a better number is to stop reading.
+        val counted = recent.filter { it.understood }
+        return ReadingProgress(
+            sessions = total,
+            meanWordsPerMinute = counted.takeIf { it.isNotEmpty() }
+                ?.map { it.wordsPerMinute }?.average()?.roundToInt(),
+            bestWordsPerMinute = counted.maxOfOrNull { it.wordsPerMinute },
+            understoodRate = recent.takeIf { it.isNotEmpty() }
+                ?.count { it.understood }?.toDouble()?.div(recent.size),
+            recent = recent,
+        )
+    }
+
     // ---- the word shelf ------------------------------------------------------
 
     /**
@@ -957,16 +1047,21 @@ class Repository(private val helper: TangoDb) {
      */
     fun wordShelf(now: Long = System.currentTimeMillis(), limit: Int = 2000): List<RootShelf> {
         val notes = listNotes(null, "", limit, Subject.ENGLISH)
-            .filter { it.type == NoteType.ENGLISH }
+            .filter { it.type == NoteType.ENGLISH || it.type == NoteType.IDIOM }
         if (notes.isEmpty()) return emptyList()
         val cards = cardsOfNotes(notes.map { it.id })
 
         val cells = notes.map { note ->
             val seen = cards[note.id].orEmpty().filter { it.srs.phase != CardPhase.NEW }
-            note["root"].trim().ifBlank { "語根なし" } to WordCell(
+            // Words group by root, idioms by the particle that gives them their sense.
+            val group = when (note.type) {
+                NoteType.IDIOM -> note["family"].trim().ifBlank { "熟語" }
+                else -> note["root"].trim().ifBlank { "語根なし" }
+            }
+            group to WordCell(
                 noteId = note.id,
                 deckId = note.deckId,
-                word = note["word"].ifBlank { note.title() },
+                word = note.title(),
                 meaning = note["meaning"],
                 memory = seen.map { CardMemory(it.srs.stability, it.srs.lastReview) },
             )

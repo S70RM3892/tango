@@ -34,6 +34,8 @@ object Seed {
         "physics_atomic" to ::seedPhysics,
         "word_list" to ::seedWordList,
         "chem_theory" to ::seedChemTheory,
+        "idioms" to ::seedIdioms,
+        "reading" to ::seedReading,
     )
 
     /** What the starter content consisted of before it was split into packs. */

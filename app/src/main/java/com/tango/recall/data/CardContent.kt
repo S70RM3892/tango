@@ -156,6 +156,9 @@ fun blankOut(sentence: String, target: String): String {
     val direct = Regex("(?i)\\b${Regex.escape(t)}\\b")
     if (direct.containsMatchIn(sentence)) return direct.replace(sentence, CLOZE_BLANK)
 
+    val tokens = t.split(Regex("\\s+"))
+    if (tokens.size >= 2) blankPhrase(sentence, tokens)?.let { return it }
+
     val stemLength = max(4, t.length - 3)
     if (t.length >= 4) {
         val stem = t.take(stemLength).lowercase()
@@ -181,6 +184,48 @@ fun cardLabel(note: Note, templateId: String): String =
     RelationCards.parse(templateId)?.let { (type, reverse) -> "つながり: " + RelationCards.label(type, reverse) }
         ?: note.type.template(templateId)?.label
         ?: templateId
+
+/**
+ * Blank a phrase that does not appear in the sentence word for word.
+ *
+ * Three things move: the verb inflects ("take up" → "took up"), a copula stands in for
+ * "be" ("be liable to" → "are liable to"), and the object can sit inside the phrase,
+ * either because the verb is separable ("think it over") or because the note wrote the
+ * slot out as A or B ("take A into account").
+ *
+ * The particles are matched exactly and only the moving parts are left open, and the
+ * blank is made only when exactly one span matches — otherwise a sentence containing
+ * two phrasal verbs would have the wrong one removed.
+ */
+private fun blankPhrase(sentence: String, tokens: List<String>): String? {
+    fun attempt(headIsLiteral: Boolean, objectInside: Boolean): String? {
+        val pattern = buildString {
+            append("(?i)\\b")
+            tokens.forEachIndexed { i, token ->
+                if (i > 0) append("\\s+")
+                when {
+                    // The note marks the object's own place.
+                    token == "A" || token == "B" -> append("\\w+(?:\\s+\\w+){0,2}")
+                    i == 0 -> {
+                        // Either the verb as written (takes, taking) or, for an
+                        // irregular one, any word at all (took, went, brought).
+                        append(if (headIsLiteral) Regex.escape(token) + "\\w*" else "[A-Za-z]+")
+                        if (objectInside) append("\\s+\\w+(?:\\s+\\w+)?")
+                    }
+                    else -> append(Regex.escape(token))
+                }
+            }
+            append("\\b")
+        }
+        return Regex(pattern).findAll(sentence).toList().singleOrNull()
+            ?.let { sentence.replaceRange(it.range, CLOZE_BLANK).toString() }
+    }
+    // The verb as written comes first, so "think it over" is blanked whole rather than
+    // leaving "Think" behind; the looser pattern only runs when that finds nothing.
+    return attempt(headIsLiteral = true, objectInside = true)
+        ?: attempt(headIsLiteral = false, objectInside = false)
+        ?: attempt(headIsLiteral = false, objectInside = true)
+}
 
 enum class Grade { CORRECT, CLOSE, WRONG }
 

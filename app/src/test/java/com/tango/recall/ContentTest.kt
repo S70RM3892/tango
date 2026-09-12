@@ -25,6 +25,52 @@ class ContentTest {
     }
 
     @Test
+    fun clozeBlanksAnInflectedPhrasalVerb() {
+        assertEquals("She ______ running last spring.", blankOut("She took up running last spring.", "take up"))
+        assertEquals(
+            "The invention ______ a social change.",
+            blankOut("The invention brought about a social change.", "bring about"),
+        )
+        assertEquals(
+            "The country ______ a long recession.",
+            blankOut("The country went through a long recession.", "go through"),
+        )
+    }
+
+    @Test
+    fun clozeBlanksAPhraseWithItsObjectInside() {
+        assertEquals("______ before you decide.", blankOut("Think it over before you decide.", "think over"))
+        assertEquals(
+            "We must ______.",
+            blankOut("We must take the delay into account.", "take A into account"),
+        )
+    }
+
+    @Test
+    fun clozeLeavesAnAmbiguousSentenceAlone() {
+        // Two candidates for the verb: blanking the wrong one is worse than not blanking.
+        val sentence = "He gave up smoking and took up running."
+        assertTrue(blankOut(sentence, "take up").endsWith("（${CLOZE_BLANK}）"))
+    }
+
+    @Test
+    fun clozeBlanksAnIdiomWrittenWithBe() {
+        // The note says "be liable to"; the sentence says "are liable to".
+        assertEquals(
+            "Metal parts ______ rust in damp air.",
+            blankOut("Metal parts are liable to rust in damp air.", "be liable to"),
+        )
+        assertEquals(
+            "Prices ______ change without notice.",
+            blankOut("Prices are subject to change without notice.", "be subject to"),
+        )
+        assertEquals(
+            "Students should ______ the deadline.",
+            blankOut("Students should be aware of the deadline.", "be aware of"),
+        )
+    }
+
+    @Test
     fun clozeFallsBackWhenTheWordIsAbsent() {
         val out = blankOut("まったく無関係な文", "abandon")
         assertTrue(out.contains(CLOZE_BLANK))

@@ -23,6 +23,7 @@ import com.tango.recall.ui.screens.DeckScreen
 import com.tango.recall.ui.screens.GraphScreen
 import com.tango.recall.ui.screens.HomeScreen
 import com.tango.recall.ui.screens.NoteScreen
+import com.tango.recall.ui.screens.ReadingScreen
 import com.tango.recall.ui.screens.ReviewScreen
 import com.tango.recall.ui.screens.SettingsScreen
 import com.tango.recall.ui.screens.StatsScreen
@@ -57,6 +58,7 @@ object Routes {
     const val NOTE_REVIEW = "review/note/{noteId}"
     const val SESSION = "review/session"
     const val WORDS = "words"
+    const val READING = "reading"
     const val GRAPH = "graph/{deckId}"
     const val UNIVERSITIES = "universities"
     const val STATS = "stats"
@@ -131,6 +133,7 @@ fun TangoApp() {
             }
             composable(Routes.SESSION) { ReviewScreen(vm, nav, deckId = null, resume = true) }
             composable(Routes.WORDS) { WordShelfScreen(vm, nav) }
+            composable(Routes.READING) { ReadingScreen(vm, nav) }
             composable(Routes.UNIVERSITIES) { UniversityScreen(vm, nav) }
             composable(Routes.STATS) { StatsScreen(vm, nav) }
             composable(Routes.SETTINGS) { SettingsScreen(vm, nav) }

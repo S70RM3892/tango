@@ -118,6 +118,43 @@ enum class NoteType(
         ),
     ),
 
+    /**
+     * 熟語.
+     *
+     * A phrasal verb looks arbitrary until the particle is read as carrying its own
+     * meaning — off is separation, up is completion, out is exhaustion — and then a
+     * dozen of them stop being a dozen things. So the family is a field of its own and
+     * the notes are grouped by it, exactly as the words are grouped by root. The
+     * one-word equivalent is kept too, because that is what makes an idiom usable in
+     * composition rather than only recognisable in reading.
+     */
+    IDIOM(
+        id = "idiom",
+        label = "熟語",
+        subject = Subject.ENGLISH,
+        fields = listOf(
+            FieldDef("phrase", "熟語", "put off"),
+            FieldDef("meaning", "意味", "延期する"),
+            FieldDef("family", "芯（前置詞・型）", "off（分離）"),
+            FieldDef("core", "なぜその意味になるか", "off は「離す」。予定から切り離して先へ送る", multiline = true),
+            FieldDef("example", "例文", "They put off the meeting until Friday.", multiline = true),
+            FieldDef("exampleJa", "例文訳", "彼らは会議を金曜まで延期した。", multiline = true),
+            FieldDef("synonym", "1語で言い換えると", "defer, postpone"),
+            FieldDef("memo", "メモ", "", multiline = true),
+        ),
+        templates = listOf(
+            CardTemplate("idiom_ja", "熟語 → 意味", listOf("phrase"), listOf("meaning", "synonym"),
+                AnswerMode.REVEAL, requires = listOf("phrase", "meaning")),
+            CardTemplate("ja_idiom", "意味 → 熟語（入力）", listOf("meaning"), listOf("phrase"),
+                AnswerMode.TYPE, requires = listOf("phrase", "meaning")),
+            CardTemplate("idiom_cloze", "例文穴埋め", listOf("example"), listOf("phrase"),
+                AnswerMode.CLOZE, requires = listOf("phrase", "example"),
+                clozeSentenceField = "example", clozeAnswerField = "phrase"),
+            CardTemplate("idiom_core", "熟語 → 芯", listOf("phrase"), listOf("core", "family"),
+                AnswerMode.REVEAL, requires = listOf("phrase", "core"), defaultEnabled = false),
+        ),
+    ),
+
     CHEM_SUBSTANCE(
         id = "chem_substance",
         label = "化学・物質",
@@ -258,6 +295,46 @@ enum class NoteType(
             CardTemplate(
                 "method", "解き方を思い出す", listOf("question"), listOf("solution"), AnswerMode.REVEAL,
                 requires = listOf("question", "solution"), defaultEnabled = false,
+            ),
+        ),
+    ),
+
+    /**
+     * 速読用の長文.
+     *
+     * Reading speed is the one thing in this app that cannot be drilled by recall: it
+     * has to be measured under time, against text long enough for the eye to settle
+     * into a rhythm, and paired with a comprehension check — otherwise "faster" just
+     * means "read less". The passage is therefore both a card (the question is asked
+     * again on a schedule) and the material for the timed screen.
+     */
+    READING(
+        id = "reading",
+        label = "速読",
+        subject = Subject.ENGLISH,
+        fields = listOf(
+            FieldDef("title", "見出し", "Why forgetting is useful"),
+            FieldDef("passage", "英文", "", multiline = true),
+            FieldDef("question", "設問", "What does the author claim about forgetting?", multiline = true),
+            FieldDef("answer", "答え", "忘れることは記憶の失敗ではなく、必要な取捨選択だという主張。", multiline = true),
+            FieldDef(
+                "points", "押さえる点（1行に1つ）",
+                "筆者の主張を1文で言えるか\n具体例が何の例かを言えるか",
+                multiline = true,
+            ),
+            FieldDef("ja", "全訳", "", multiline = true),
+            FieldDef("source", "出典", "自作"),
+            FieldDef("memo", "メモ", "", multiline = true),
+        ),
+        templates = listOf(
+            CardTemplate(
+                "reading_answer", "読んで設問に答える", listOf("question", "passage"), listOf("answer"),
+                AnswerMode.SELF_CHECK,
+                requires = listOf("passage", "question", "answer"), checklistField = "points",
+            ),
+            CardTemplate(
+                "reading_ja", "全訳で確認する", listOf("passage"), listOf("ja"),
+                AnswerMode.REVEAL, requires = listOf("passage", "ja"), defaultEnabled = false,
             ),
         ),
     ),
@@ -455,6 +532,8 @@ enum class LinkType(
 
         fun forNoteType(type: NoteType): List<LinkType> = when (type) {
             NoteType.ENGLISH -> listOf(SAME_ROOT, SYNONYM, ANTONYM, DERIVED, CONFUSABLE, CONTRAST, RELATED)
+            NoteType.IDIOM -> listOf(SAME_GROUP, SYNONYM, ANTONYM, CONFUSABLE, CONTRAST, RELATED)
+            NoteType.READING -> listOf(SAME_GROUP, CONTRAST, RELATED)
             NoteType.CHEM_SUBSTANCE -> listOf(REACTS_WITH, PRODUCES, SAME_GROUP, CONTRAST, CONFUSABLE, HYPERNYM, RELATED)
             NoteType.CHEM_REACTION -> listOf(PRODUCES, SAME_GROUP, CONTRAST, RELATED)
             NoteType.EISAKUBUN -> listOf(SAME_GROUP, CONTRAST, CONFUSABLE, RELATED)
@@ -497,6 +576,7 @@ data class Note(
     /** Short label used in lists, link chips and search results. */
     fun title(): String = when (type) {
         NoteType.ENGLISH -> this["word"]
+        NoteType.IDIOM -> this["phrase"]
         NoteType.CHEM_SUBSTANCE -> this["name"]
         NoteType.CHEM_REACTION -> this["title"]
         NoteType.EISAKUBUN -> this["ja"]
@@ -505,11 +585,13 @@ data class Note(
         NoteType.MATH -> this["question"]
         NoteType.PHYSICS -> this["title"]
         NoteType.CHEM_THEORY -> this["title"]
+        NoteType.READING -> this["title"]
         NoteType.BASIC -> this["front"]
     }.ifBlank { type.fields.firstNotNullOfOrNull { fields[it.id]?.ifBlank { null } } ?: "(空)" }
 
     fun subtitle(): String = when (type) {
         NoteType.ENGLISH -> this["meaning"]
+        NoteType.IDIOM -> this["meaning"]
         NoteType.CHEM_SUBSTANCE -> this["formula"]
         NoteType.CHEM_REACTION -> this["equation"]
         NoteType.EISAKUBUN -> this["en"]
@@ -518,6 +600,7 @@ data class Note(
         NoteType.MATH -> this["approach"]
         NoteType.PHYSICS -> this["formula"]
         NoteType.CHEM_THEORY -> this["formula"]
+        NoteType.READING -> this["question"]
         NoteType.BASIC -> this["back"]
     }
 }

@@ -2,6 +2,8 @@ package com.tango.recall
 
 import androidx.test.core.app.ApplicationProvider
 import com.tango.recall.data.AnswerMode
+import com.tango.recall.data.CLOZE_BLANK
+import com.tango.recall.data.blankOut
 import com.tango.recall.data.NoteType
 import com.tango.recall.data.Repository
 import com.tango.recall.data.Seed
@@ -72,6 +74,27 @@ class SeedContentTest {
             assertTrue(
                 "${note.title()} の例文にその語が出てこない",
                 note["example"].lowercase().contains(note["word"].take(4).lowercase()),
+            )
+        }
+    }
+
+    @Test
+    fun everyIdiomShowsItsParticleAndItsUse() {
+        val idioms = notesOf(NoteType.IDIOM)
+        assertTrue("熟語の数", idioms.size >= 110)
+        for (note in idioms) {
+            val phrase = note["phrase"]
+            assertTrue("$phrase に芯がない", note["family"].isNotBlank())
+            assertTrue("$phrase になぜその意味かの説明がない", note["core"].isNotBlank())
+            assertTrue("$phrase に例文訳がない", note["exampleJa"].isNotBlank())
+            assertTrue("$phrase の1語の言い換えがない", note["synonym"].isNotBlank())
+            // What matters is not that the example spells the idiom the same way — it
+            // says "took up", not "take up" — but that the cloze card can still blank
+            // it out. That is the thing the card depends on.
+            val blanked = blankOut(note["example"], phrase)
+            assertTrue(
+                "$phrase の例文が穴埋めにならない: ${note["example"]}",
+                blanked.contains(CLOZE_BLANK) && !blanked.endsWith("（$CLOZE_BLANK）"),
             )
         }
     }
