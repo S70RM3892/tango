@@ -1,0 +1,58 @@
+front	back	hint	memo	tags
+等加速度直線運動の3公式	v = v0 + at\nx = v0t + (1/2)at^2\nv^2 - v0^2 = 2ax	時間を含まない式が1つ	第3式は時間を消去した形。時間が問われていないときはこれ	butsuri rikigaku
+運動方程式	ma = F	質量×加速度	力の向きに正をとる。座標軸の設定を先に書く	butsuri rikigaku
+重力による位置エネルギー	U = mgh	基準面が必要	基準面をどこに取るかを明記する	butsuri energy
+運動エネルギー	K = (1/2)mv^2	速さの2乗	仕事とエネルギーの関係 W = ΔK	butsuri energy
+弾性力による位置エネルギー	U = (1/2)kx^2	自然長からの伸び	x は自然長からのずれ	butsuri energy
+力学的エネルギー保存則が使える条件	はたらく力が保存力（重力・弾性力）だけのとき。摩擦や空気抵抗があると成り立たない	非保存力の有無	垂直抗力や張力は仕事をしないので保存則は成立する	butsuri energy
+運動量と力積の関係	mv' - mv = Ft	力積は力×時間	衝突では力積を使うほうが速い	butsuri undoryo
+運動量保存則が使える条件	外力の力積が無視できるとき（衝突・分裂の瞬間）	外力	内力だけなら成立。斜面上では重力の成分に注意	butsuri undoryo
+反発係数	e = -(v1' - v2')/(v1 - v2)	相対速度の比	e=1 弾性衝突（力学的エネルギー保存）、e=0 完全非弾性衝突	butsuri undoryo
+等速円運動の加速度	a = v^2/r = rω^2	中心向き	向心加速度。向きは中心向き	butsuri enundou
+向心力	F = mv^2/r = mrω^2	中心向きの合力	遠心力は非慣性系で導入する見かけの力	butsuri enundou
+単振動の変位・速度・加速度	x = A sin(ωt+φ)\nv = Aω cos(ωt+φ)\na = -Aω^2 sin(ωt+φ) = -ω^2 x	加速度が変位に比例し逆向き	a = -ω^2 x が単振動の定義	butsuri tanshindou
+ばね振り子の周期	T = 2π√(m/k)	質量とばね定数	振幅によらない	butsuri tanshindou
+単振り子の周期	T = 2π√(l/g)	長さと重力加速度	質量によらない。微小振動の近似	butsuri tanshindou confusable
+万有引力の法則	F = G(Mm)/r^2	距離の2乗に反比例	G = 6.67×10^-11 N·m^2/kg^2	butsuri banyu
+万有引力による位置エネルギー	U = -GMm/r	無限遠を基準	負の値になる。基準は無限遠	butsuri banyu
+第二宇宙速度（脱出速度）	v = √(2GM/R)	力学的エネルギーが0	(1/2)mv^2 - GMm/R = 0 から	butsuri banyu
+ケプラーの第3法則	T^2/a^3 = 一定	周期の2乗と半長軸の3乗	同じ中心天体をまわる天体で共通	butsuri banyu
+波の基本式	v = fλ	速さ=振動数×波長	媒質が変わると v と λ は変わるが f は変わらない	butsuri hadou
+ドップラー効果（一般式）	f' = f(V - vo)/(V - vs)	観測者が分子、音源が分母	符号は音源から観測者へ向かう向きを正	butsuri hadou confusable
+弦の固有振動（両端固定）	λn = 2L/n, fn = nv/(2L)	腹の数 n	基本振動 n=1	butsuri hadou
+閉管の固有振動	λn = 4L/(2n-1)	奇数倍のみ	開管は 2L/n で偶数倍も出る。ここが混同点	butsuri hadou confusable
+ヤングの実験の明線条件	dx/L = mλ	経路差=波長の整数倍	d は スリット間隔、L はスクリーンまでの距離	butsuri hadou
+薄膜による干渉で位相が反転する条件	屈折率の小さい媒質から大きい媒質へ入射して反射するとき、位相が π ずれる	固定端反射	反射の回数で明暗条件が入れ替わる	butsuri hadou confusable
+屈折の法則	n1 sinθ1 = n2 sinθ2	スネルの法則	n = c/v。屈折率が大きいほど速さは遅い	butsuri hadou
+全反射の条件	sinθc = n2/n1（n1 > n2）	密から疎へ	臨界角を超えると全反射	butsuri hadou
+クーロンの法則	F = k(q1q2)/r^2	距離の2乗に反比例	k = 9.0×10^9 N·m^2/C^2	butsuri denki
+電場と電位の関係	E = -dV/dx（一様な場では V = Ed）	電位の傾き	電場は電位が下がる向き	butsuri denki
+コンデンサーの電気容量	C = εS/d	面積と距離	誘電体を入れると ε 倍になる	butsuri denki
+コンデンサーの静電エネルギー	U = (1/2)CV^2 = (1/2)QV = Q^2/(2C)	3通りの表し方	何が一定かで使い分ける	butsuri denki
+オームの法則	V = RI	電圧=抵抗×電流	抵抗率 ρ を使うと R = ρL/S	butsuri denki
+ジュール熱	Q = VIt = I^2Rt	電力×時間	直列なら I 共通、並列なら V 共通	butsuri denki
+直線電流がつくる磁場	H = I/(2πr)	距離に反比例	円形電流の中心は H = I/(2r)、ソレノイドは H = nI	butsuri jiki confusable
+電流が磁場から受ける力	F = IBL sinθ	フレミング左手	向きは左手の法則	butsuri jiki
+ローレンツ力	f = qvB sinθ	荷電粒子1個	円運動の半径 r = mv/(qB)	butsuri jiki
+ファラデーの電磁誘導の法則	V = -N(ΔΦ/Δt)	磁束の時間変化	負号はレンツの法則	butsuri jiki
+導体棒が動くときの誘導起電力	V = vBL	速さ×磁束密度×長さ	ローレンツ力から導ける	butsuri jiki
+自己インダクタンスによる起電力	V = -L(ΔI/Δt)	電流の時間変化	コイルに蓄えられるエネルギーは (1/2)LI^2	butsuri jiki
+交流の実効値	Ve = Vo/√2	最大値の 1/√2	電力の平均から出る	butsuri kouryu
+LC回路の共振周波数	f = 1/(2π√(LC))	リアクタンスが等しい	ωL = 1/(ωC) から	butsuri kouryu
+ボイル・シャルルの法則	PV/T = 一定	絶対温度	T は必ずケルビン	butsuri netsu
+理想気体の状態方程式	PV = nRT	R = 8.31 J/(mol·K)	気体分子運動論から導出できる	butsuri netsu
+単原子分子理想気体の内部エネルギー	U = (3/2)nRT	自由度3	二原子分子では (5/2)nRT	butsuri netsu confusable
+熱力学第一法則	ΔU = Q + W	W は気体がされた仕事	符号の定義を問題文で確認する	butsuri netsu confusable
+定圧変化で気体がする仕事	W = PΔV	圧力一定	P-V グラフの面積	butsuri netsu
+断熱変化の特徴	Q = 0 なので ΔU = W。圧縮すると温度が上がる	熱の出入りなし	ポアソンの式 PV^γ = 一定	butsuri netsu
+気体分子運動論の圧力	P = (1/3)(Nm v̄^2)/V	分子数と平均2乗速度	(1/2)m v̄^2 = (3/2)kT	butsuri netsu
+光電効果の式	(1/2)mv^2max = hν - W	仕事関数 W	限界振動数 ν0 = W/h。光の強さでは電子の運動エネルギーは変わらない	butsuri genshi
+ド・ブロイ波長	λ = h/(mv)	運動量の逆数	粒子の波動性	butsuri genshi
+ボーアの量子条件	2πr = nλ = nh/(mv)	円周が波長の整数倍	定常状態の条件	butsuri genshi
+水素原子のエネルギー準位	En = -13.6/n^2 eV	n の2乗に反比例	基底状態 n=1 で -13.6 eV	butsuri genshi
+原子核の結合エネルギーと質量欠損	E = Δm c^2	質量欠損	1 u ≒ 931 MeV	butsuri genshi
+半減期	N = N0 (1/2)^(t/T)	T が半減期	対数を取って解く	butsuri genshi
+摩擦力（静止・動）	静止摩擦力は 0 から μN まで変化。動摩擦力は F = μ'N で一定	動き出す前後	静止摩擦力は与えられた力に応じて変わる	butsuri rikigaku confusable
+浮力	F = ρVg	押しのけた液体の重さ	V は沈んでいる部分の体積	butsuri rikigaku
+剛体のつりあい条件	力のベクトル和 = 0 かつ 任意の点まわりの力のモーメントの和 = 0	2条件	モーメントの中心はどこに取ってもよい	butsuri rikigaku
+仕事率	P = W/t = Fv	力×速さ	一定速度で動かすときは Fv が便利	butsuri energy

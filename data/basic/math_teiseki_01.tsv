@@ -1,0 +1,41 @@
+front	back	hint	memo	tags
+2次方程式の解と係数の関係	ax^2+bx+c=0 の2解を α,β とすると α+β = -b/a、αβ = c/a	和と積	対称式は α+β と αβ で表す	suugaku daisu
+判別式	D = b^2 - 4ac。D>0 異なる2実解、D=0 重解、D<0 虚数解	実数解の個数	D/4 = (b/2)^2 - ac も使える	suugaku daisu
+相加相乗平均	a>0, b>0 のとき (a+b)/2 ≧ √(ab)。等号は a=b のとき	正であることが条件	最小値を求めるときの定番。等号成立条件を必ず書く	suugaku daisu
+コーシー・シュワルツの不等式	(a^2+b^2)(x^2+y^2) ≧ (ax+by)^2	内積の不等式	等号は a:b = x:y	suugaku daisu
+三角関数の加法定理	sin(α±β) = sinα cosβ ± cosα sinβ\ncos(α±β) = cosα cosβ ∓ sinα sinβ	符号に注意	cos は符号が逆になる	suugaku sankaku
+2倍角の公式	sin2θ = 2sinθcosθ\ncos2θ = 1-2sin^2θ = 2cos^2θ-1	加法定理から	半角公式は cos2θ の式を変形して得る	suugaku sankaku
+三角関数の合成	a sinθ + b cosθ = √(a^2+b^2) sin(θ+α)	√(a^2+b^2)	tanα = b/a。最大最小の頻出手法	suugaku sankaku
+正弦定理	a/sinA = b/sinB = c/sinC = 2R	外接円の半径	R が絡むときはこれ	suugaku sankaku
+余弦定理	a^2 = b^2 + c^2 - 2bc cosA	3辺と1角	2辺と挟角、または3辺が分かるとき	suugaku sankaku
+三角形の面積	S = (1/2)bc sinA = √(s(s-a)(s-b)(s-c))	2辺と挟角 / ヘロン	内接円なら S = rs	suugaku zukei
+点と直線の距離	d = |ax0+by0+c|/√(a^2+b^2)	絶対値	直線は ax+by+c=0 の形にしてから	suugaku zukei
+円の方程式	(x-a)^2 + (y-b)^2 = r^2	中心と半径	一般形 x^2+y^2+lx+my+n=0 は平方完成する	suugaku zukei
+等差数列の和	Sn = n(a1+an)/2 = n{2a1+(n-1)d}/2	初項と末項	項数の数え方に注意	suugaku suuretsu
+等比数列の和	Sn = a1(1-r^n)/(1-r) （r≠1）	r=1 の場合分け	r=1 のときは Sn = na1	suugaku suuretsu confusable
+階差数列	bn = a(n+1) - an のとき an = a1 + Σ(k=1 to n-1) bk	n≧2 で成立	n=1 のときを別に確かめる	suugaku suuretsu confusable
+数学的帰納法の手順	(1) n=1 で成立を示す (2) n=k で成立を仮定し n=k+1 で成立を示す	2段階	仮定をどこで使ったかを明示する	suugaku suuretsu
+Σ の公式	Σk = n(n+1)/2\nΣk^2 = n(n+1)(2n+1)/6\nΣk^3 = {n(n+1)/2}^2	3つ	Σk^3 は (Σk)^2 に等しい	suugaku suuretsu
+微分係数の定義	f'(a) = lim(h→0) {f(a+h)-f(a)}/h	極限	定義から求めよと言われたらこれを書く	suugaku bibun
+積の微分	(fg)' = f'g + fg'	たすき掛け	商は (f/g)' = (f'g - fg')/g^2	suugaku bibun
+合成関数の微分	{f(g(x))}' = f'(g(x))·g'(x)	連鎖律	外側を微分してから内側を掛ける	suugaku bibun
+部分積分	∫f g' dx = fg - ∫f' g dx	どちらを微分するか	log や多項式は微分する側に置く	suugaku sekibun
+置換積分	∫f(g(x))g'(x)dx = ∫f(u)du（u = g(x)）	積分範囲も変える	定積分では上端下端を u に直す	suugaku sekibun confusable
+回転体の体積	V = π∫[a,b] {f(x)}^2 dx	半径の2乗	y軸まわりは x = g(y) にして π∫{g(y)}^2 dy	suugaku sekibun
+区分求積法	lim(n→∞) (1/n)Σ(k=1 to n) f(k/n) = ∫[0,1] f(x)dx	1/n と k/n	Σ を積分に直す典型	suugaku sekibun
+ベクトルの内積	a·b = |a||b|cosθ = a1b1 + a2b2	2通りの表し方	垂直 ⇔ 内積0	suugaku vector
+直線のベクトル方程式	p = a + t·d	通る点と方向ベクトル	3点が同一直線上 ⇔ 適当な t で表せる	suugaku vector
+内分点の位置ベクトル	p = (n·a + m·b)/(m+n) （AP:PB = m:n）	分母は m+n	係数が交差することに注意	suugaku vector confusable
+複素数平面の回転	点 z を原点まわりに θ 回転すると z(cosθ + i sinθ)	極形式	|z|=1 の複素数を掛けると回転	suugaku fukuso
+ド・モアブルの定理	(cosθ + i sinθ)^n = cos(nθ) + i sin(nθ)	n乗	n乗根を求めるときに使う	suugaku fukuso
+順列と組合せ	nPr = n!/(n-r)!\nnCr = n!/{r!(n-r)!}	並べるか選ぶか	組合せは順序を区別しない	suugaku kakuritsu
+反復試行の確率	nCr p^r (1-p)^(n-r)	二項分布	独立試行を n 回	suugaku kakuritsu
+条件付き確率	P(B|A) = P(A∩B)/P(A)	分母は条件のほう	ベイズの定理につながる	suugaku kakuritsu
+期待値	E(X) = Σ xk pk	値×確率の和	E(aX+b) = aE(X)+b	suugaku kakuritsu
+ユークリッドの互除法	a を b で割った余りを r とすると gcd(a,b) = gcd(b,r)	余りに置き換える	不定方程式の特殊解を求めるのに使う	suugaku seisuu
+合同式の基本	a ≡ b (mod m) ⇔ a-b が m で割り切れる	余りが等しい	足し算・掛け算はそのまま計算できる	suugaku seisuu
+背理法の型	結論を否定して仮定し、矛盾を導く	否定の作り方	「すべて」の否定は「ある〜が存在して〜でない」	suugaku ronsho
+対偶	「p ならば q」の対偶は「q でない ならば p でない」。元の命題と真偽が一致する	逆・裏と区別	直接証明が難しいときに使う	suugaku ronsho confusable
+極限の不定形の処理	∞/∞ は最高次で割る。0/0 は因数分解か有理化	形を見て手を決める	√ が絡むときは有理化	suugaku kyokugen
+はさみうちの原理	an ≦ bn ≦ cn で lim an = lim cn = α なら lim bn = α	上下から挟む	三角関数や整数部分の極限で使う	suugaku kyokugen
+平均値の定理	f が [a,b] で連続、(a,b) で微分可能なら f(b)-f(a) = f'(c)(b-a) となる c が存在する	中間の点	不等式の証明に使う	suugaku bibun
