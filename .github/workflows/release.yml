@@ -1,8 +1,18 @@
 name: Release
 
+# Pushing a tag from a session that is scoped to one branch is rejected, so the
+# release is driven by .github/release.txt instead: write the version there, push,
+# and this workflow creates the tag, the release and the APK. The step is idempotent
+# — if the release already exists it stops without rebuilding.
 on:
   push:
-    tags: ["v*"]
+    branches: ["**"]
+    paths: [".github/release.txt"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release, e.g. v1.4"
+        required: false
 
 permissions:
   contents: write
@@ -12,58 +22,74 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0   # annotated tag messages become the release notes
+
+      - name: Work out which version to release
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            tag="${{ inputs.tag }}"
+          else
+            tag="$(tr -d '[:space:]' < .github/release.txt)"
+          fi
+          if [ -z "$tag" ]; then
+            echo "no version to release"; exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "apk=Tango-${tag#v}.apk" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if this release already exists
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "${{ steps.version.outputs.tag }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::${{ steps.version.outputs.tag }} is already released; nothing to do."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Set up JDK 17
+        if: steps.existing.outputs.exists == 'false'
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Gradle
+        if: steps.existing.outputs.exists == 'false'
         uses: gradle/actions/setup-gradle@v4
 
       - name: Run unit tests
+        if: steps.existing.outputs.exists == 'false'
         run: ./gradlew testDebugUnitTest
 
       - name: Build release APK
-        run: ./gradlew assembleRelease
-
-      - name: Name the APK after the tag
-        id: apk
+        if: steps.existing.outputs.exists == 'false'
         run: |
-          version="${GITHUB_REF_NAME#v}"
-          name="Tango-${version}.apk"
-          cp app/build/outputs/apk/release/app-release.apk "$name"
-          echo "name=$name" >> "$GITHUB_OUTPUT"
+          ./gradlew assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk "${{ steps.version.outputs.apk }}"
 
-      - name: Compose release notes
-        run: |
-          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > notes.md
-          cat >> notes.md <<'NOTES'
-
-          ---
-
-          **インストール**: APK を端末に移してファイルアプリから開いてください。
-          初回は「不明なアプリのインストール」の許可が必要です。上書きインストールで
-          学習履歴は保持されます（データベースは追加のみの移行）。
-
-          この APK は利便のため debug キーで署名しています。ストア配布や長期運用を
-          する場合は自前のキーストアに差し替えてください。
-          NOTES
-
-      - name: Create the GitHub release
+      - name: Publish the release
+        if: steps.existing.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          APK: ${{ steps.version.outputs.apk }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "Tango $GITHUB_REF_NAME" \
-            --notes-file notes.md \
-            "${{ steps.apk.outputs.name }}"
+          notes=".github/release-notes/${TAG}.md"
+          if [ -f "$notes" ]; then
+            gh release create "$TAG" --target "$GITHUB_SHA" \
+              --title "Tango $TAG" --notes-file "$notes" "$APK"
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" \
+              --title "Tango $TAG" --generate-notes "$APK"
+          fi
 
       - name: Upload test report
-        if: always()
+        if: always() && steps.existing.outputs.exists == 'false'
         uses: actions/upload-artifact@v4
         with:
           name: unit-test-report
